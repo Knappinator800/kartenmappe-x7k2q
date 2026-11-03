@@ -1,5 +1,5 @@
 /* Hält die App-Dateien offline bereit. Karten-API und Bilder laufen immer übers Netz. */
-var CACHE = 'pokesammlung-v2';
+var CACHE = 'pokesammlung-v3';
 var FILES = ['./', 'index.html', 'sync.js', 'firebase-config.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'icon-maskable-192.png', 'icon-maskable-512.png'];
 
 self.addEventListener('install', function (e) {

@@ -89,6 +89,8 @@ input[type=number]{width:96px}
 .item{display:grid;grid-template-columns:52px minmax(0,1fr);gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:8px}
 .item .thumb{width:52px}
 .item .ctrl{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.vsel{width:auto;padding:5px 8px;font-size:.85rem}
+.card .vsel{width:100%;margin-bottom:6px}
 .badge{display:inline-block;border:1px solid var(--line);border-radius:6px;padding:0 6px;font-size:.75rem;color:var(--muted);margin-right:4px;text-transform:uppercase}
 .qty{display:inline-flex;align-items:center;gap:6px}
 .qty button{width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:var(--surface);padding:0}
@@ -238,6 +240,7 @@ a{color:var(--accent)}
     <div id="lbMeta" class="meta"></div>
     <div id="lbPrice" class="price none"></div>
     <div class="choice">
+      <select id="lbVar" aria-label="Variante" hidden></select>
       <select id="lbColl" aria-label="Sammlung zum Speichern" hidden></select>
       <button id="lbZoom" class="btn small" type="button">Vergrößern</button>
       <button id="lbAddItems" class="btn small primary" type="button">In Sammlung</button>
@@ -324,12 +327,42 @@ a{color:var(--accent)}
   }
 
   /* ---------- Preise ---------- */
-  function priceFrom(card) {
-    var cm = card && card.pricing && card.pricing.cardmarket;
+  /* Varianten: 'normal' = Standardpreis der Karte (bei Holo-Raritäten die Holo-Karte selbst),
+     'reverse' = Reverse-Holo-Preis (bei TCGdex die Felder mit Endung „-holo“). */
+  var VARIANT_LABEL = { normal: 'Normal / Holo', reverse: 'Reverse Holo' };
+  function variantOf(item) { return item && item.variant === 'reverse' ? 'reverse' : 'normal'; }
+  function itemKey(lang, id, variant) { return lang + ':' + id + (variant === 'reverse' ? ':reverse' : ''); }
+  function cmOf(card) { return card && card.pricing && card.pricing.cardmarket || null; }
+  function hasReverse(card) {
+    var cm = cmOf(card);
+    if (cm && ['trend-holo', 'avg-holo', 'low-holo'].some(function (k) { return typeof cm[k] === 'number' && cm[k] > 0; })) return true;
+    return !!(card && card.variants && card.variants.reverse === true);
+  }
+  function priceFrom(card, variant) {
+    var cm = cmOf(card);
     if (!cm) return null;
-    var value = [cm.trend, cm.avg, cm.low].find(function (v) { return typeof v === 'number' && v > 0; });
+    var sfx = variant === 'reverse' ? '-holo' : '';
+    var value = ['trend', 'avg', 'low'].map(function (k) { return cm[k + sfx]; })
+      .find(function (v) { return typeof v === 'number' && v > 0; });
     if (value == null) return null;
     return { value: value, updated: cm.updated || null, unit: cm.unit || 'EUR', idProduct: cm.idProduct || null };
+  }
+  function variantSelect(onchange) {
+    var s = el('select', { class: 'vsel', 'aria-label': 'Variante' });
+    s.hidden = true;
+    s.addEventListener('change', function () { onchange(s.value); });
+    return s;
+  }
+  function fillVariants(sel, card, current) {
+    sel.replaceChildren();
+    if (!hasReverse(card)) { sel.hidden = true; return false; }
+    ['normal', 'reverse'].forEach(function (v) {
+      var p = priceFrom(card, v);
+      sel.append(el('option', { value: v, text: VARIANT_LABEL[v] + ' · ' + (p ? money(p.value) : 'kein Preis') }));
+    });
+    sel.value = current || 'normal';
+    sel.hidden = false;
+    return true;
   }
   function unitPrice(item) {
     if (typeof item.manual === 'number') return { value: item.manual, manual: true };
@@ -646,11 +679,11 @@ a{color:var(--accent)}
     return t;
   }
   /* Karte in Sammlung ('items') oder Wunschliste ('wish') legen. Liefert true, wenn ohne Preisdaten. */
-  function addByBase(lang, base, kind, known, colId) {
+  function addByBase(lang, base, kind, known, colId, variant) {
     var p = known ? Promise.resolve(known) : getCard(lang, base.id);
     return p.then(
-      function (card) { addCard(lang, card, kind, colId); return false; },
-      function () { addCard(lang, base, kind, colId); return true; }
+      function (card) { addCard(lang, card, kind, colId, variant); return false; },
+      function () { addCard(lang, base, kind, colId, 'normal'); return true; }
     );
   }
   function savedText(kind, colId, noPrice) {
@@ -662,12 +695,20 @@ a{color:var(--accent)}
     var meta = el('div', { class: 'meta', text: '#' + (base.localId || '') });
     var priceLine = el('div', { class: 'price none', text: 'Preis lädt …' });
     var detail = null;
+    var variant = 'normal';
+    var varSel = variantSelect(function (v) { variant = v; showPrice(); });
+    function showPrice() {
+      if (!detail) return;
+      var p = priceFrom(detail, variant);
+      if (p) { priceLine.textContent = money(p.value); priceLine.className = 'price'; }
+      else { priceLine.textContent = 'Kein Preis vorhanden'; priceLine.className = 'price none'; }
+    }
     var actions = el('div', { class: 'choice' });
     var addBtn = el('button', { class: 'btn small primary', type: 'button', text: 'Hinzufügen' });
     function resetActions() { actions.replaceChildren(addBtn); }
     function doAdd(kind, colId) {
       actions.replaceChildren(el('span', { class: 'meta', text: 'Wird gespeichert …' }));
-      addByBase(lang, base, kind, detail, colId).then(function (noPrice) {
+      addByBase(lang, base, kind, detail, colId, variant).then(function (noPrice) {
         actions.replaceChildren(el('span', { class: 'meta', text: savedText(kind, colId, noPrice) }));
         setTimeout(resetActions, 1800);
       });
@@ -701,7 +742,7 @@ a{color:var(--accent)}
     var node = el('article', { class: 'card' },
       zoomBtn,
       el('div', { class: 'cname', text: base.name || base.id }),
-      meta, priceLine, actions);
+      meta, priceLine, varSel, actions);
     return {
       node: node,
       fill: function (card) {
@@ -715,9 +756,8 @@ a{color:var(--accent)}
         var setName = card.set && card.set.name ? card.set.name : '';
         var total = card.set && card.set.cardCount && card.set.cardCount.official;
         meta.textContent = [setName, '#' + (card.localId || base.localId || '') + (total ? '/' + total : '')].filter(Boolean).join(' · ');
-        var p = priceFrom(card);
-        if (p) { priceLine.textContent = money(p.value); priceLine.className = 'price'; }
-        else { priceLine.textContent = 'Kein Preis vorhanden'; priceLine.className = 'price none'; }
+        if (!fillVariants(varSel, card, variant)) variant = 'normal';
+        showPrice();
       },
       fail: function () { priceLine.textContent = 'Details nicht ladbar'; priceLine.className = 'price none'; }
     };
@@ -727,14 +767,15 @@ a{color:var(--accent)}
   function collById(id) {
     return state.collections.find(function (c) { return c.id === id; }) || null;
   }
-  function addCard(lang, card, kind, colId) {
+  function addCard(lang, card, kind, colId, variant) {
+    variant = variant === 'reverse' ? 'reverse' : 'normal';
     var col = (colId && collById(colId)) || active();
     var list = listOf(col, kind || 'items');
-    var key = lang + ':' + card.id;
+    var key = itemKey(lang, card.id, variant);
     var existing = list.find(function (i) { return i.key === key; });
     if (existing) {
       existing.qty += 1;
-      var p0 = priceFrom(card);
+      var p0 = priceFrom(card, variant);
       if (p0) existing.price = p0;
     } else {
       var total = card.set && card.set.cardCount && card.set.cardCount.official;
@@ -742,10 +783,35 @@ a{color:var(--accent)}
         key: key, id: card.id, lang: lang, name: card.name || card.id,
         set: card.set && card.set.name ? card.set.name : '',
         number: (card.localId || '') + (total ? '/' + total : ''),
-        image: card.image || '', qty: 1, price: priceFrom(card), manual: null, added: Date.now()
+        image: card.image || '', qty: 1, variant: variant, rev: hasReverse(card),
+        price: priceFrom(card, variant), manual: null, added: Date.now()
       });
     }
     save(); renderCollection();
+  }
+  function changeVariant(item, v) {
+    v = v === 'reverse' ? 'reverse' : 'normal';
+    if (variantOf(item) === v) return;
+    var col = active();
+    var list = listOf(col);
+    var newKey = itemKey(item.lang, item.id, v);
+    var other = list.find(function (i) { return i !== item && i.key === newKey; });
+    if (other) {
+      other.qty += item.qty;
+      if (typeof item.manual === 'number' && typeof other.manual !== 'number') other.manual = item.manual;
+      var rest = list.filter(function (i) { return i !== item; });
+      if (curKind === 'wish') state.wish = rest; else col.items = rest;
+      save(); renderCollection();
+      return;
+    }
+    item.variant = v;
+    item.key = newKey;
+    item.price = null;
+    save(); renderCollection();
+    getCard(item.lang, item.id).then(function (card) {
+      item.price = priceFrom(card, v);
+      item.rev = hasReverse(card);
+    }).catch(function () {}).then(function () { save(); renderCollection(); });
   }
   function changeQty(item, d) {
     var col = active();
@@ -897,10 +963,20 @@ a{color:var(--accent)}
         el('div', { class: 'cname', text: item.name }),
         el('div', { class: 'meta' },
           el('span', { class: 'badge', text: item.lang }),
+          variantOf(item) === 'reverse' ? el('span', { class: 'badge', text: 'Reverse' }) : null,
           [item.set, item.number ? '#' + item.number : ''].filter(Boolean).join(' · ')),
         priceTxt);
 
+      var varSel = null;
+      if (item.rev !== false || variantOf(item) === 'reverse') {
+        varSel = el('select', { class: 'vsel', 'aria-label': 'Variante für ' + item.name });
+        ['normal', 'reverse'].forEach(function (v) { varSel.append(el('option', { value: v, text: VARIANT_LABEL[v] })); });
+        varSel.value = variantOf(item);
+        varSel.addEventListener('change', function () { changeVariant(item, varSel.value); });
+      }
+
       var ctrl = el('div', { class: 'ctrl' },
+        varSel,
         el('div', { class: 'qty' },
           el('button', { type: 'button', 'aria-label': 'Weniger', text: '−', onclick: function () { changeQty(item, -1); } }),
           el('span', { text: item.qty }),
@@ -941,8 +1017,8 @@ a{color:var(--accent)}
     pool(items.map(function (item) {
       return function () {
         return getCard(item.lang, item.id, true).then(function (card) {
-          var p = priceFrom(card);
-          item.price = p;
+          item.price = priceFrom(card, variantOf(item));
+          item.rev = hasReverse(card);
         }).catch(function () { failed++; }).then(function () {
           done++;
           s.textContent = 'Aktualisiere ' + done + ' von ' + items.length + ' …';
@@ -966,10 +1042,10 @@ a{color:var(--accent)}
   function exportJson() { download('pokesammlung.json', JSON.stringify(state, null, 2), 'application/json'); }
   function exportCsv() {
     var col = active();
-    var rows = [['Name', 'Set', 'Nummer', 'Sprache', 'Anzahl', 'Preis pro Karte EUR', 'Quelle']];
+    var rows = [['Name', 'Set', 'Nummer', 'Sprache', 'Variante', 'Anzahl', 'Preis pro Karte EUR', 'Quelle']];
     listOf(col).forEach(function (i) {
       var up = unitPrice(i);
-      rows.push([i.name, i.set, i.number, i.lang, i.qty, up ? String(up.value).replace('.', ',') : '', up ? (up.manual ? 'eigener Preis' : 'Cardmarket') : '']);
+      rows.push([i.name, i.set, i.number, i.lang, VARIANT_LABEL[variantOf(i)], i.qty, up ? String(up.value).replace('.', ',') : '', up ? (up.manual ? 'eigener Preis' : 'Cardmarket') : '']);
     });
     var csv = rows.map(function (r) {
       return r.map(function (c) { return '"' + String(c == null ? '' : c).replace(/"/g, '""') + '"'; }).join(';');
@@ -1067,7 +1143,13 @@ a{color:var(--accent)}
   $('#tab-wish').addEventListener('click', function () { showView('wish'); });
 
   /* ---------- Kartenansicht (Vergrößern, Blättern) ---------- */
-  var vIndex = -1, vZoom = false, vDetail = null, vMsgTimer = null;
+  var vIndex = -1, vZoom = false, vDetail = null, vMsgTimer = null, vVariant = 'normal';
+  function showViewerPrice() {
+    var pl = $('#lbPrice');
+    var p = vDetail ? priceFrom(vDetail, vVariant) : null;
+    if (p) { pl.textContent = money(p.value) + ' (Cardmarket)'; pl.className = 'price'; }
+    else { pl.textContent = 'Kein Preis vorhanden'; pl.className = 'price none'; }
+  }
   function viewerOpen() { return !$('#lb').hidden; }
   function fillViewerColl() {
     var sel = $('#lbColl');
@@ -1105,7 +1187,8 @@ a{color:var(--accent)}
     img.src = urls[0];
   }
   function showCard(i) {
-    vIndex = i; vDetail = null;
+    vIndex = i; vDetail = null; vVariant = 'normal';
+    $('#lbVar').hidden = true;
     setZoom(false);
     var base = results[i], lang = state.lang;
     $('#lbImg').alt = base.name || '';
@@ -1129,9 +1212,8 @@ a{color:var(--accent)}
       var setName = card.set && card.set.name ? card.set.name : '';
       var total = card.set && card.set.cardCount && card.set.cardCount.official;
       $('#lbMeta').textContent = pos + ' · ' + [setName, '#' + (card.localId || base.localId || '') + (total ? '/' + total : '')].filter(Boolean).join(' · ');
-      var p = priceFrom(card);
-      if (p) { pl.textContent = money(p.value) + ' (Cardmarket)'; pl.className = 'price'; }
-      else { pl.textContent = 'Kein Preis vorhanden'; pl.className = 'price none'; }
+      fillVariants($('#lbVar'), card, vVariant);
+      showViewerPrice();
     }).catch(function () {
       if (vIndex !== i) return;
       pl.textContent = 'Details nicht ladbar'; pl.className = 'price none';
@@ -1164,12 +1246,13 @@ a{color:var(--accent)}
     var m = $('#lbMsg');
     m.textContent = 'Wird gespeichert …';
     var colId = kind === 'wish' ? null : ($('#lbColl').value || state.active);
-    addByBase(state.lang, base, kind, vDetail, colId).then(function (noPrice) {
+    addByBase(state.lang, base, kind, vDetail, colId, vVariant).then(function (noPrice) {
       m.textContent = savedText(kind, colId, noPrice);
       clearTimeout(vMsgTimer);
       vMsgTimer = setTimeout(function () { m.textContent = ''; }, 2000);
     });
   }
+  $('#lbVar').addEventListener('change', function () { vVariant = this.value; showViewerPrice(); });
   $('#lbClose').addEventListener('click', closeViewer);
   $('#lbPrev').addEventListener('click', function () { step(-1); });
   $('#lbNext').addEventListener('click', function () { step(1); });
