@@ -1,0 +1,1226 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pokésammlung</title>
+<meta name="theme-color" content="#2347c5">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Pokésammlung">
+<style>
+/* Layout: eine Spalte, oben Sammlungsauswahl, darunter Umschalter Suche / Sammlung. */
+:root{
+  --bg:#f3f4f6; --surface:#ffffff; --ink:#14181d; --muted:#5b6571; --line:#dce0e5;
+  --accent:#2347c5; --accent-ink:#ffffff; --ok:#17794a; --warn:#a85a00; --danger:#b3261e;
+  --scrim:rgba(8,10,14,.94); --lb-ink:#f2f4f7;
+  --radius:10px;
+  --font:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1317; --surface:#171c22; --ink:#e8ebef; --muted:#97a2af; --line:#2a313a;
+    --accent:#86a3ff; --accent-ink:#0b1020; --ok:#5fcf93; --warn:#f0b35c; --danger:#ff8b82;
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 var(--font)}
+.wrap{max-width:980px;margin:0 auto;padding-block:16px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1{font-size:1.35rem;margin:0 0 2px;letter-spacing:-.01em}
+.sub{color:var(--muted);margin:0 0 14px;font-size:.9rem}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.grow{flex:1 1 180px;min-width:0}
+input[type=search],input[type=text],input[type=number],select{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 10px;min-width:0;width:100%}
+input[type=number]{width:96px}
+.btn{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 12px;white-space:nowrap}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+.btn.small{padding:5px 9px;font-size:.85rem}
+.btn.danger{color:var(--danger)}
+.tabs{display:grid;grid-template-columns:2fr 2fr 1fr;gap:4px;background:var(--line);padding:4px;border-radius:12px;margin:12px 0}
+.tabs button{border:0;background:transparent;padding:9px 4px;border-radius:9px;font-weight:600;color:var(--muted);min-width:0}
+.tabs button[aria-selected=true]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.tabs .wishtab{font-size:.78rem;line-height:1.15;hyphens:manual;overflow-wrap:anywhere}
+.kindtitle{font-size:1.05rem;margin:0 0 10px;overflow-wrap:anywhere}
+.thumbbtn{display:block;width:100%;border:0;padding:0;background:none;border-radius:6px;cursor:zoom-in}
+.manage{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;margin-bottom:10px}
+.manage summary{cursor:pointer;font-weight:600;overflow-wrap:anywhere}
+.manage[open] summary{margin-bottom:10px}
+.choice select{flex:1 1 100%;padding:6px 8px}
+.choice .meta{flex:1 1 100%}
+.lb select{background:rgba(255,255,255,.14);color:var(--lb-ink);border-color:rgba(255,255,255,.3)}
+.lb select option{background:var(--surface);color:var(--ink)}
+.choice{display:flex;gap:6px;flex-wrap:wrap;align-items:center;min-height:30px}
+.langs{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.langs button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 12px;font-size:.88rem}
+.langs button[aria-pressed=true]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.overview{margin-bottom:10px}
+.overview[hidden]{display:none}
+.ovlist{display:flex;flex-direction:column;gap:6px}
+.ovrow{display:flex;justify-content:space-between;align-items:baseline;gap:10px;width:100%;text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 10px}
+.ovrow[aria-current=true]{border-color:var(--accent)}
+.ovrow .nm{min-width:0;overflow-wrap:anywhere}
+.ovrow .v{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
+.setrow{margin-bottom:4px}
+.suggest{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 6px}
+.suggest[hidden]{display:none}
+.suggest .btn{white-space:normal;text-align:left}
+.status{min-height:1.4em;margin:10px 2px;color:var(--muted);font-size:.9rem}
+.status.err{color:var(--danger)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:8px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.thumb{aspect-ratio:5/7;background:var(--bg);border-radius:6px;overflow:hidden;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.8rem}
+.thumb img{width:100%;height:100%;object-fit:contain;display:block}
+.cname{font-weight:600;font-size:.92rem;overflow-wrap:anywhere}
+.meta{color:var(--muted);font-size:.8rem;overflow-wrap:anywhere}
+.price{font-variant-numeric:tabular-nums;font-weight:600}
+.price.none{color:var(--warn);font-weight:500;font-size:.82rem}
+.summary{display:flex;flex-wrap:wrap;gap:16px 28px;align-items:baseline;margin-bottom:10px}
+.total{font-size:1.7rem;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.list{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.item{display:grid;grid-template-columns:52px minmax(0,1fr);gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:8px}
+.item .thumb{width:52px}
+.item .ctrl{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.badge{display:inline-block;border:1px solid var(--line);border-radius:6px;padding:0 6px;font-size:.75rem;color:var(--muted);margin-right:4px;text-transform:uppercase}
+.qty{display:inline-flex;align-items:center;gap:6px}
+.qty button{width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:var(--surface);padding:0}
+.qty span{min-width:1.6em;text-align:center;font-variant-numeric:tabular-nums}
+.line{margin-left:auto;font-variant-numeric:tabular-nums;font-weight:600}
+a{color:var(--accent)}
+.note{color:var(--muted);font-size:.85rem;margin-top:14px}
+.empty{padding:28px 12px;text-align:center;color:var(--muted)}
+.lb{position:fixed;inset:0;z-index:50;background:var(--scrim);color:var(--lb-ink);display:flex;flex-direction:column;gap:8px;padding:max(10px,env(safe-area-inset-top,0px)) max(12px,env(safe-area-inset-right,0px)) max(10px,env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px))}
+.lb[hidden]{display:none}
+.lb-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.lb-title{font-weight:600;min-width:0;overflow-wrap:anywhere}
+.lb-main{flex:1;min-height:0;display:flex;align-items:stretch;gap:6px}
+.lb-nav{flex:0 0 40px;border:0;border-radius:10px;background:rgba(255,255,255,.14);color:var(--lb-ink);font-size:1.9rem;line-height:1;padding:0}
+.lb-nav:disabled{opacity:.3;cursor:default}
+.lb-stage{flex:1;min-width:0;overflow:auto;display:flex;align-items:center;justify-content:center}
+.lb-stage img{width:100%;height:100%;object-fit:contain;display:block;cursor:zoom-in}
+.lb-stage img[hidden]{display:none}
+.lb-stage.zoomed{display:block}
+.lb-stage.zoomed img{width:220%;height:auto;max-width:none;cursor:zoom-out}
+.lb-noimg{color:var(--lb-ink);opacity:.7}
+.lb-bottom{display:flex;flex-direction:column;gap:6px}
+.lb .meta{color:var(--lb-ink);opacity:.75}
+.lb .price.none{color:var(--warn)}
+.lb .btn{background:rgba(255,255,255,.14);color:var(--lb-ink);border-color:rgba(255,255,255,.3)}
+.lb .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+@media (min-width:640px){
+  .item{grid-template-columns:52px minmax(0,1fr) auto}
+  .item .ctrl{grid-column:auto;justify-content:flex-end}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Pokésammlung</h1>
+  <p class="sub">Karten auf Deutsch, Englisch, Japanisch, Koreanisch und Chinesisch suchen, in Sammlungen speichern und mit Cardmarket-Preisen bewerten.</p>
+
+  <div class="tabs" role="tablist">
+    <button role="tab" id="tab-search" aria-selected="true" aria-controls="view-search" type="button">Suche</button>
+    <button role="tab" id="tab-coll" aria-selected="false" aria-controls="view-coll" type="button">Sammlung <span id="countBadge"></span></button>
+    <button role="tab" id="tab-wish" class="wishtab" aria-selected="false" aria-controls="view-coll" type="button">Wunsch&shy;liste <span id="wishBadge"></span></button>
+  </div>
+
+  <main>
+    <section id="view-search" role="tabpanel" aria-labelledby="tab-search">
+      <form id="searchForm" class="row" role="search">
+        <input id="q" type="search" class="grow" placeholder="Name, optional mit Nummer: Glurak 4/102" aria-label="Kartenname" autocomplete="off">
+        <button class="btn primary" type="submit">Suchen</button>
+      </form>
+      <div class="langs" id="langs" role="group" aria-label="Sprache der Karten"></div>
+      <div class="row setrow">
+        <input id="setFilter" type="search" class="grow" placeholder="Sets filtern, zum Beispiel Obsidian" aria-label="Sets filtern" autocomplete="off">
+        <select id="setSel" class="grow" aria-label="Set auswählen"><option value="">Sets werden geladen …</option></select>
+      </div>
+      <div id="setSuggest" class="suggest" hidden></div>
+      <div id="status" class="status" role="status" aria-live="polite">Gib einen Namen ein und wähle die Sprache der Karte.</div>
+      <div id="results" class="grid"></div>
+      <div class="row" style="justify-content:center;margin-top:12px"><button class="btn" id="moreBtn" type="button" hidden>Mehr anzeigen</button></div>
+    </section>
+
+    <section id="view-coll" role="tabpanel" data-kind="items" aria-label="Gespeicherte Karten" hidden>
+      <details class="manage" id="collManage">
+        <summary>Sammlung: <span id="manageName"></span> · wechseln oder verwalten</summary>
+        <div class="row">
+          <label for="coll" class="meta" style="flex:0 0 auto">Aktive Sammlung</label>
+          <select id="coll" class="grow"></select>
+          <button class="btn small" id="newColl" type="button">Neu</button>
+          <button class="btn small" id="renColl" type="button">Umbenennen</button>
+          <button class="btn small danger" id="delColl" type="button">Löschen</button>
+        </div>
+        <form id="nameForm" class="row" hidden style="margin-top:10px">
+          <input id="nameInput" type="text" class="grow" maxlength="60" aria-label="Name der Sammlung" placeholder="Name der Sammlung">
+          <button class="btn primary small" type="submit">Speichern</button>
+          <button class="btn small" id="nameCancel" type="button">Abbrechen</button>
+        </form>
+      </details>
+      <div class="panel overview" id="overview">
+        <h2 class="kindtitle">Gesamtübersicht aller Sammlungen</h2>
+        <div class="summary">
+          <div><div class="meta">Gesamtwert</div><div class="total" id="ovTotal">0,00 €</div></div>
+          <div><div class="meta">Karten</div><div class="price" id="ovCards">0</div></div>
+          <div><div class="meta">Sammlungen</div><div class="price" id="ovCount">0</div></div>
+          <div><div class="meta" id="ovMissing"></div></div>
+        </div>
+        <div id="ovList" class="ovlist"></div>
+      </div>
+      <div class="panel">
+        <h2 id="kindTitle" class="kindtitle">Sammlung</h2>
+        <div class="summary">
+          <div><div class="meta" id="valLabel">Geschätzter Wert</div><div class="total" id="total">0,00 €</div></div>
+          <div><div class="meta">Karten</div><div class="price" id="cardCount">0</div></div>
+          <div><div class="meta" id="noPrice"></div></div>
+        </div>
+        <div class="row" style="margin-bottom:10px">
+          <label for="sortSel" class="meta">Sortieren nach</label>
+          <select id="sortSel" class="grow">
+            <option value="name">Name (A bis Z)</option>
+            <option value="price-desc">Preis pro Karte (hoch zu niedrig)</option>
+            <option value="price-asc">Preis pro Karte (niedrig zu hoch)</option>
+            <option value="value-desc">Gesamtwert (hoch zu niedrig)</option>
+            <option value="set">Set</option>
+            <option value="number">Kartennummer</option>
+            <option value="added">Zuletzt hinzugefügt</option>
+          </select>
+        </div>
+        <div class="row">
+          <button class="btn primary small" id="refresh" type="button">Preise aktualisieren</button>
+          <button class="btn small" id="exportJson" type="button">Export JSON</button>
+          <button class="btn small" id="exportCsv" type="button">Export CSV</button>
+          <label class="btn small" for="importFile">Import JSON</label>
+          <input id="importFile" type="file" accept="application/json,.json" hidden>
+        </div>
+        <div id="collStatus" class="status" role="status" aria-live="polite"></div>
+      </div>
+      <div id="list" class="list"></div>
+    </section>
+  </main>
+
+  <p class="note">Preise stammen aus den Cardmarket-Daten der TCGdex-API (Trend, sonst Durchschnitt). Für Karten ohne Preis, etwa viele koreanische und chinesische, trägst du einen eigenen Preis ein. Die eBay-Links öffnen die Suche nach verkauften Artikeln, eBay-Preise werden nicht automatisch übernommen. Tippe in den Suchergebnissen auf eine Karte, um sie zu vergrößern, und blättere mit den Pfeilen oder per Wischen weiter. Die Wunschliste ist unabhängig von deinen Sammlungen. Alles liegt nur in diesem Browser; sichere es über Export JSON.</p>
+</div>
+
+<div id="lb" class="lb" role="dialog" aria-modal="true" aria-label="Kartenansicht" hidden>
+  <div class="lb-top">
+    <div id="lbTitle" class="lb-title"></div>
+    <button id="lbClose" class="btn small" type="button">Schließen</button>
+  </div>
+  <div class="lb-main">
+    <button id="lbPrev" class="lb-nav" type="button" aria-label="Vorherige Karte">‹</button>
+    <div id="lbStage" class="lb-stage">
+      <img id="lbImg" alt="">
+      <div id="lbNoImg" class="lb-noimg" hidden>Kein Bild vorhanden</div>
+    </div>
+    <button id="lbNext" class="lb-nav" type="button" aria-label="Nächste Karte">›</button>
+  </div>
+  <div class="lb-bottom">
+    <div id="lbMeta" class="meta"></div>
+    <div id="lbPrice" class="price none"></div>
+    <div class="choice">
+      <select id="lbColl" aria-label="Sammlung zum Speichern" hidden></select>
+      <button id="lbZoom" class="btn small" type="button">Vergrößern</button>
+      <button id="lbAddItems" class="btn small primary" type="button">In Sammlung</button>
+      <button id="lbAddWish" class="btn small wish" type="button">Auf Wunschliste</button>
+    </div>
+    <div id="lbMsg" class="meta" role="status" aria-live="polite"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var API = 'https://api.tcgdex.net/v2/';
+  var LANGS = [['de','Deutsch'],['en','Englisch'],['ja','Japanisch'],['ko','Koreanisch'],['zh-tw','Chinesisch (traditionell)'],['zh-cn','Chinesisch (vereinfacht)']];
+  var KEY = 'pokesammlung.v1';
+  var PAGE = 24;
+
+  function $(s) { return document.querySelector(s); }
+  function el(tag, attrs) {
+    var e = document.createElement(tag);
+    var a = attrs || {};
+    Object.keys(a).forEach(function (k) {
+      var v = a[k];
+      if (v == null || v === false) return;
+      if (k === 'class') e.className = v;
+      else if (k === 'text') e.textContent = v;
+      else if (k.indexOf('on') === 0) e.addEventListener(k.slice(2), v);
+      else e.setAttribute(k, v === true ? '' : v);
+    });
+    for (var i = 2; i < arguments.length; i++) {
+      var kids = [].concat(arguments[i]);
+      kids.forEach(function (kid) {
+        if (kid == null || kid === false) return;
+        e.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+      });
+    }
+    return e;
+  }
+  function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+  var eur = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' });
+  function money(n) { return eur.format(n); }
+
+  /* ---------- Zustand ---------- */
+  var state = load();
+  function load() {
+    try {
+      var s = JSON.parse(localStorage.getItem(KEY));
+      if (s && Array.isArray(s.collections) && s.collections.length) return migrateWish(s);
+    } catch (e) {}
+    var id = uid();
+    return { collections: [{ id: id, name: 'Meine Sammlung', items: [] }], active: id, lang: 'de', wish: [] };
+  }
+  /* Die Wunschliste ist unabhängig von den Sammlungen. Ältere Daten (Wunschliste je Sammlung) werden zusammengeführt. */
+  function migrateWish(st) {
+    if (!Array.isArray(st.wish)) st.wish = [];
+    st.collections.forEach(function (c) {
+      if (Array.isArray(c.wish)) {
+        c.wish.forEach(function (w) {
+          var ex = st.wish.find(function (i) { return i.key === w.key; });
+          if (ex) ex.qty += w.qty; else st.wish.push(w);
+        });
+      }
+      delete c.wish;
+    });
+    return st;
+  }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+  function active() {
+    return state.collections.find(function (c) { return c.id === state.active; }) || state.collections[0];
+  }
+  /* 'items' = Karten der aktiven Sammlung, 'wish' = eine gemeinsame Wunschliste */
+  var curKind = 'items';
+  function listOf(col, kind) {
+    var k = kind || curKind;
+    if (k === 'wish') {
+      if (!Array.isArray(state.wish)) state.wish = [];
+      return state.wish;
+    }
+    if (!Array.isArray(col.items)) col.items = [];
+    return col.items;
+  }
+
+  /* ---------- Preise ---------- */
+  function priceFrom(card) {
+    var cm = card && card.pricing && card.pricing.cardmarket;
+    if (!cm) return null;
+    var value = [cm.trend, cm.avg, cm.low].find(function (v) { return typeof v === 'number' && v > 0; });
+    if (value == null) return null;
+    return { value: value, updated: cm.updated || null, unit: cm.unit || 'EUR', idProduct: cm.idProduct || null };
+  }
+  function unitPrice(item) {
+    if (typeof item.manual === 'number') return { value: item.manual, manual: true };
+    if (item.price && typeof item.price.value === 'number') return { value: item.price.value, manual: false };
+    return null;
+  }
+
+  /* ---------- API ---------- */
+  var cache = new Map();
+  function getCard(lang, id, fresh) {
+    var k = lang + ':' + id;
+    if (!fresh && cache.has(k)) return cache.get(k);
+    var p = fetch(API + lang + '/cards/' + encodeURIComponent(id)).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+    cache.set(k, p);
+    p.catch(function () { cache.delete(k); });
+    return p;
+  }
+  function pool(tasks, limit) {
+    var i = 0;
+    function worker() {
+      if (i >= tasks.length) return Promise.resolve();
+      var t = tasks[i++];
+      return t().catch(function () {}).then(worker);
+    }
+    var ws = [];
+    for (var n = 0; n < limit; n++) ws.push(worker());
+    return Promise.all(ws);
+  }
+
+  /* ---------- Sprachwahl ---------- */
+  function renderLangs() {
+    var box = $('#langs');
+    box.replaceChildren();
+    LANGS.forEach(function (l) {
+      box.append(el('button', {
+        type: 'button', 'aria-pressed': String(state.lang === l[0]), text: l[1],
+        onclick: function () {
+          state.lang = l[0]; save(); renderLangs();
+          curSet = ''; $('#setFilter').value = '';
+          loadSets();
+          if ($('#q').value.trim()) search();
+          else { token++; results = []; $('#results').replaceChildren(); $('#moreBtn').hidden = true; setStatus('Wähle ein Set oder gib einen Kartennamen ein.'); }
+        }
+      }));
+    });
+  }
+
+  /* ---------- Suche ---------- */
+  var results = [], shown = 0, token = 0;
+  function listByName(lang, q) {
+    return fetch(API + lang + '/cards?name=' + encodeURIComponent(q))
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (d) { return Array.isArray(d) ? d : []; });
+  }
+  function isLatin(q) { return /^[\u0000-ɏ\s'.\-]+$/.test(q); }
+  /* Für Japanisch, Koreanisch, Chinesisch: deutschen/englischen Namen suchen,
+     die Pokédex-Nummer lesen und damit Karten in der Zielsprache abfragen. */
+  function listByDex(lang, q) {
+    return Promise.all([
+      listByName('de', q).catch(function () { return []; }),
+      listByName('en', q).catch(function () { return []; })
+    ]).then(function (r) {
+      var seeds = [];
+      r[0].slice(0, 3).forEach(function (c) { seeds.push({ lang: 'de', id: c.id }); });
+      r[1].slice(0, 3).forEach(function (c) { seeds.push({ lang: 'en', id: c.id }); });
+      return Promise.all(seeds.map(function (s) {
+        return getCard(s.lang, s.id).catch(function () { return null; });
+      }));
+    }).then(function (cards) {
+      var dex = [];
+      cards.forEach(function (c) {
+        if (c && Array.isArray(c.dexId)) c.dexId.forEach(function (d) { if (dex.indexOf(d) < 0) dex.push(d); });
+      });
+      dex = dex.slice(0, 3);
+      return Promise.all(dex.map(function (d) {
+        return fetch(API + lang + '/cards?dexId=' + encodeURIComponent(d))
+          .then(function (r) { return r.ok ? r.json() : []; })
+          .then(function (x) { return Array.isArray(x) ? x : []; })
+          .catch(function () { return []; });
+      }));
+    }).then(function (lists) {
+      var seen = {}, out = [];
+      lists.forEach(function (l) { l.forEach(function (c) { if (!seen[c.id]) { seen[c.id] = 1; out.push(c); } }); });
+      return out;
+    });
+  }
+  function setStatus(msg, err) {
+    var s = $('#status');
+    s.textContent = msg;
+    s.className = 'status' + (err ? ' err' : '');
+  }
+  /* ---------- Sets ---------- */
+  var curSet = '', allSets = [], setsCache = {}, setCardsCache = {};
+  function fetchSets(lang) {
+    var p = setsCache[lang];
+    if (!p) {
+      p = setsCache[lang] = fetch(API + lang + '/sets')
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function (d) { return Array.isArray(d) ? d : []; });
+      p.catch(function () { delete setsCache[lang]; });
+    }
+    return p;
+  }
+  function setLabel(s) {
+    var name = s.name || s.id;
+    var asian = ['ja', 'ko', 'zh-tw', 'zh-cn'].indexOf(state.lang) >= 0;
+    if (asian) {
+      if (s._alt && s._alt !== name) return s._alt + ' (' + name + ')';
+      return s.id + ' (' + name + ')';
+    }
+    return name;
+  }
+  function loadSets() {
+    var lang = state.lang;
+    var sel = $('#setSel');
+    sel.replaceChildren(el('option', { value: '', text: 'Sets werden geladen …' }));
+    var asian = ['ja', 'ko', 'zh-tw', 'zh-cn'].indexOf(lang) >= 0;
+    var jobs = [fetchSets(lang)];
+    if (asian) {
+      jobs.push(fetchSets('de').catch(function () { return []; }));
+      jobs.push(fetchSets('en').catch(function () { return []; }));
+    }
+    Promise.all(jobs).then(function (r) {
+      var list = r[0];
+      if (asian) {
+        /* Deutschen oder englischen Namen über die gleiche Set-Kennung zuordnen */
+        var map = {};
+        r[2].forEach(function (s) { map[String(s.id).toLowerCase()] = s.name; });
+        r[1].forEach(function (s) { map[String(s.id).toLowerCase()] = s.name; });
+        list.forEach(function (s) { s._alt = map[String(s.id).toLowerCase()] || ''; });
+      }
+      if (lang !== state.lang) return;
+      allSets = list;
+      renderSetOptions();
+    }).catch(function () {
+      delete setsCache[lang];
+      if (lang !== state.lang) return;
+      allSets = [];
+      sel.replaceChildren(el('option', { value: '', text: 'Sets nicht ladbar' }));
+    });
+  }
+  /* Sets, die zum Filtertext passen (leer, wenn nichts eingegeben ist) */
+  function matchingSets() {
+    var f = $('#setFilter').value.trim().toLowerCase();
+    if (!f) return [];
+    return allSets.filter(function (s) {
+      return setLabel(s).toLowerCase().indexOf(f) >= 0 || String(s.id).toLowerCase().indexOf(f) >= 0;
+    });
+  }
+  function renderSuggest(list) {
+    var box = $('#setSuggest');
+    box.replaceChildren();
+    if (!list.length) { box.hidden = true; return; }
+    box.hidden = false;
+    list.slice(0, 8).forEach(function (s) {
+      var n = s.cardCount && s.cardCount.total;
+      box.append(el('button', {
+        class: 'btn small', type: 'button',
+        text: setLabel(s) + (n ? ' · ' + n + ' Karten' : ''),
+        onclick: function () { chooseSet(s.id); }
+      }));
+    });
+    if (list.length > 8) box.append(el('span', { class: 'meta', text: '… und ' + (list.length - 8) + ' weitere im Auswahlfeld' }));
+  }
+  function chooseSet(id) {
+    curSet = id;
+    $('#setFilter').value = '';
+    renderSetOptions();
+    showSet();
+  }
+  var autoTimer = null;
+  function renderSetOptions() {
+    var f = $('#setFilter').value.trim().toLowerCase();
+    var sel = $('#setSel');
+    sel.replaceChildren(el('option', { value: '', text: allSets.length ? 'Alle Sets (' + allSets.length + ')' : 'Keine Sets in dieser Sprache gefunden' }));
+    var shownSets = 0;
+    allSets.forEach(function (s) {
+      var label = setLabel(s);
+      if (f && label.toLowerCase().indexOf(f) < 0 && String(s.id).toLowerCase().indexOf(f) < 0) return;
+      var n = s.cardCount && s.cardCount.total;
+      sel.append(el('option', { value: s.id, text: label + (n ? ' · ' + n + ' Karten' : '') }));
+      shownSets++;
+    });
+    renderSuggest(matchingSets());
+    if (f && !shownSets) sel.replaceChildren(el('option', { value: '', text: 'Kein Set passt zum Filter' }));
+    if (curSet && Array.prototype.some.call(sel.options, function (o) { return o.value === curSet; })) sel.value = curSet;
+    else sel.value = '';
+  }
+  function parseQuery(raw) {
+    var nm = raw.match(/(?:^|\s)#?(\d{1,3})(?:\s*\/\s*(\d{1,3}))?(?=\s|$)/);
+    var numWanted = null, q = raw;
+    if (nm) { numWanted = parseInt(nm[1], 10); q = raw.replace(nm[0], ' ').replace(/\s+/g, ' ').trim(); }
+    return { q: q, numWanted: numWanted };
+  }
+  function showSet() {
+    var lang = state.lang, id = curSet, t = ++token;
+    var pq = parseQuery($('#q').value.trim());
+    PAGE = 48;
+    setStatus('Set wird geladen …');
+    $('#results').replaceChildren();
+    $('#moreBtn').hidden = true;
+    var ck = lang + ':' + id;
+    var p = setCardsCache[ck] || (setCardsCache[ck] = fetch(API + lang + '/sets/' + encodeURIComponent(id))
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (s) { return Array.isArray(s.cards) ? s.cards : []; }));
+    p.then(function (cards) {
+      if (t !== token) return;
+      var list = cards;
+      if (pq.q) list = list.filter(function (c) { return String(c.name || '').toLowerCase().indexOf(pq.q.toLowerCase()) >= 0; });
+      if (pq.numWanted != null) list = list.filter(function (c) { return parseInt(String(c.localId || '').replace(/\D/g, ''), 10) === pq.numWanted; });
+      results = list;
+      shown = 0;
+      if (!list.length) {
+        setStatus(cards.length ? 'In diesem Set passt keine Karte zu deiner Eingabe (' + cards.length + ' Karten im Set).' : 'Für dieses Set liefert die API keine Karten.');
+        return;
+      }
+      setStatus(list.length + (pq.q || pq.numWanted != null ? ' passende Karten im Set. Preise werden geladen …' : ' Karten im Set. Preise werden geladen …'));
+      more(lang, t);
+    }).catch(function (e) {
+      delete setCardsCache[ck];
+      if (t !== token) return;
+      setStatus('Das Set konnte nicht geladen werden (' + e.message + ').', true);
+    });
+  }
+
+  function search() {
+    if (curSet) { showSet(); return; }
+    PAGE = 24;
+    var raw = $('#q').value.trim();
+    if (!raw) return;
+    /* Nummer erkennen: "4", "#4" oder "4/102" neben dem Namen */
+    var nm = raw.match(/(?:^|\s)#?(\d{1,3})(?:\s*\/\s*(\d{1,3}))?(?=\s|$)/);
+    var numWanted = null, q = raw;
+    if (nm) {
+      numWanted = parseInt(nm[1], 10);
+      q = raw.replace(nm[0], ' ').replace(/\s+/g, ' ').trim();
+    }
+    if (!q) {
+      setStatus('Gib zusätzlich zur Nummer einen Kartennamen an, zum Beispiel „Glurak 4/102“. Eine Nummer allein ist nicht eindeutig, sie wiederholt sich in jedem Set.', true);
+      return;
+    }
+    var t = ++token;
+    var lang = state.lang;
+    setStatus('Suche läuft …');
+    $('#results').replaceChildren();
+    $('#moreBtn').hidden = true;
+    var viaDex = lang !== 'de' && lang !== 'en' && isLatin(q);
+    (viaDex ? listByDex(lang, q) : listByName(lang, q))
+      .then(function (data) {
+        if (t !== token) return;
+        results = Array.isArray(data) ? data : [];
+        if (numWanted != null) {
+          results = results.filter(function (c) {
+            return parseInt(String(c.localId || '').replace(/\D/g, ''), 10) === numWanted;
+          });
+        }
+        shown = 0;
+        if (!results.length) {
+          setStatus(viaDex
+            ? 'Keine Treffer. Der deutsche oder englische Name wurde nicht gefunden, oder es gibt in dieser Sprache keine Karte dazu.'
+            : 'Keine Treffer. Der Name muss in der gewählten Sprache geschrieben sein (Deutsch: Glurak, Englisch: Charizard). Bei Japanisch, Koreanisch und Chinesisch kannst du den deutschen oder englischen Namen eingeben.');
+          return;
+        }
+        setStatus(results.length + ' Treffer' + (viaDex ? ' (über die Pokédex-Nummer gefunden)' : '') + '. Preise werden geladen …');
+        more(lang, t);
+      })
+      .catch(function (e) {
+        if (t !== token) return;
+        setStatus('Die Karten-API ist nicht erreichbar (' + e.message + '). Test: Öffne ' + API + lang + '/cards?name=' + encodeURIComponent(q) + ' direkt im Browser. Zeigt diese Seite Daten, blockiert deine Ansicht die Verbindung. Öffne die Datei dann per Doppelklick in Chrome, Firefox oder Edge.', true);
+      });
+  }
+  function more(lang, t) {
+    var start = shown;
+    var slice = results.slice(shown, shown + PAGE);
+    shown += slice.length;
+    $('#moreBtn').hidden = shown >= results.length;
+    var tasks = slice.map(function (base, k) {
+      var tile = buildTile(lang, base, start + k);
+      $('#results').append(tile.node);
+      return function () {
+        return getCard(lang, base.id).then(function (card) {
+          if (t === token) tile.fill(card);
+        }).catch(function () { if (t === token) tile.fail(); });
+      };
+    });
+    pool(tasks, 6).then(function () {
+      if (t === token) setStatus(results.length + ' Treffer, ' + shown + ' angezeigt.');
+    });
+  }
+  /* Deutsche Bilder fehlen bei manchen Sets; dann das englische Bild derselben Karte zeigen. */
+  function enVariant(url) { return String(url).replace('/de/', '/en/'); }
+  function thumbNode(card, lang) {
+    var t = el('div', { class: 'thumb' });
+    function build(imageBase) {
+      t.textContent = '';
+      if (!imageBase) { t.textContent = 'Kein Bild'; return; }
+      var urls = [imageBase + '/low.webp'];
+      if (lang === 'de' && enVariant(imageBase) !== imageBase) urls.push(enVariant(imageBase) + '/low.webp');
+      var img = el('img', { alt: (card && card.name) || '', loading: 'lazy' });
+      var k = 0;
+      img.addEventListener('error', function () {
+        k++;
+        if (k < urls.length) img.src = urls[k];
+        else { img.remove(); t.textContent = 'Kein Bild'; }
+      });
+      img.src = urls[0];
+      t.append(img);
+    }
+    build(card && card.image);
+    t.rebuild = build;
+    return t;
+  }
+  /* Karte in Sammlung ('items') oder Wunschliste ('wish') legen. Liefert true, wenn ohne Preisdaten. */
+  function addByBase(lang, base, kind, known, colId) {
+    var p = known ? Promise.resolve(known) : getCard(lang, base.id);
+    return p.then(
+      function (card) { addCard(lang, card, kind, colId); return false; },
+      function () { addCard(lang, base, kind, colId); return true; }
+    );
+  }
+  function savedText(kind, colId, noPrice) {
+    var c = collById(colId) || active();
+    if (kind === 'wish') return 'Auf die Wunschliste gespeichert' + (noPrice ? ' (ohne Preis)' : '');
+    return 'In „' + c.name + '“ gespeichert' + (noPrice ? ' (ohne Preis)' : '');
+  }
+  function buildTile(lang, base, idx) {
+    var meta = el('div', { class: 'meta', text: '#' + (base.localId || '') });
+    var priceLine = el('div', { class: 'price none', text: 'Preis lädt …' });
+    var detail = null;
+    var actions = el('div', { class: 'choice' });
+    var addBtn = el('button', { class: 'btn small primary', type: 'button', text: 'Hinzufügen' });
+    function resetActions() { actions.replaceChildren(addBtn); }
+    function doAdd(kind, colId) {
+      actions.replaceChildren(el('span', { class: 'meta', text: 'Wird gespeichert …' }));
+      addByBase(lang, base, kind, detail, colId).then(function (noPrice) {
+        actions.replaceChildren(el('span', { class: 'meta', text: savedText(kind, colId, noPrice) }));
+        setTimeout(resetActions, 1800);
+      });
+    }
+    function pickCollection(kind) {
+      if (state.collections.length < 2) { doAdd(kind, active().id); return; }
+      var sel = el('select', { 'aria-label': 'Sammlung wählen' });
+      state.collections.forEach(function (c) {
+        var o = el('option', { value: c.id, text: c.name });
+        if (c.id === active().id) o.selected = true;
+        sel.append(o);
+      });
+      actions.replaceChildren(
+        el('div', { class: 'meta', text: kind === 'wish' ? 'Wunschliste welcher Sammlung?' : 'In welche Sammlung?' }),
+        sel,
+        el('button', { class: 'btn small primary', type: 'button', text: 'Speichern', onclick: function () { doAdd(kind, sel.value); } }),
+        el('button', { class: 'btn small', type: 'button', 'aria-label': 'Abbrechen', text: '×', onclick: resetActions }));
+    }
+    addBtn.addEventListener('click', function () {
+      actions.replaceChildren(
+        el('button', { class: 'btn small primary', type: 'button', text: 'Sammlung', onclick: function () { pickCollection('items'); } }),
+        el('button', { class: 'btn small wish', type: 'button', text: 'Wunschliste', onclick: function () { doAdd('wish', null); } }),
+        el('button', { class: 'btn small', type: 'button', 'aria-label': 'Abbrechen', text: '×', onclick: resetActions }));
+    });
+    resetActions();
+    var thumb = thumbNode(base, lang);
+    var zoomBtn = el('button', {
+      class: 'thumbbtn', type: 'button', 'aria-label': 'Karte vergrößern: ' + (base.name || base.id),
+      onclick: function () { openViewer(idx); }
+    }, thumb);
+    var node = el('article', { class: 'card' },
+      zoomBtn,
+      el('div', { class: 'cname', text: base.name || base.id }),
+      meta, priceLine, actions);
+    return {
+      node: node,
+      fill: function (card) {
+        detail = card;
+        if (!base.image && card.image) { base.image = card.image; thumb.rebuild(card.image); }
+        else if (!base.image && !card.image && lang === 'de') {
+          getCard('en', base.id).then(function (c) {
+            if (c && c.image) { base.image = c.image; card.image = c.image; thumb.rebuild(c.image); }
+          }).catch(function () {});
+        }
+        var setName = card.set && card.set.name ? card.set.name : '';
+        var total = card.set && card.set.cardCount && card.set.cardCount.official;
+        meta.textContent = [setName, '#' + (card.localId || base.localId || '') + (total ? '/' + total : '')].filter(Boolean).join(' · ');
+        var p = priceFrom(card);
+        if (p) { priceLine.textContent = money(p.value); priceLine.className = 'price'; }
+        else { priceLine.textContent = 'Kein Preis vorhanden'; priceLine.className = 'price none'; }
+      },
+      fail: function () { priceLine.textContent = 'Details nicht ladbar'; priceLine.className = 'price none'; }
+    };
+  }
+
+  /* ---------- Sammlung ändern ---------- */
+  function collById(id) {
+    return state.collections.find(function (c) { return c.id === id; }) || null;
+  }
+  function addCard(lang, card, kind, colId) {
+    var col = (colId && collById(colId)) || active();
+    var list = listOf(col, kind || 'items');
+    var key = lang + ':' + card.id;
+    var existing = list.find(function (i) { return i.key === key; });
+    if (existing) {
+      existing.qty += 1;
+      var p0 = priceFrom(card);
+      if (p0) existing.price = p0;
+    } else {
+      var total = card.set && card.set.cardCount && card.set.cardCount.official;
+      list.push({
+        key: key, id: card.id, lang: lang, name: card.name || card.id,
+        set: card.set && card.set.name ? card.set.name : '',
+        number: (card.localId || '') + (total ? '/' + total : ''),
+        image: card.image || '', qty: 1, price: priceFrom(card), manual: null, added: Date.now()
+      });
+    }
+    save(); renderCollection();
+  }
+  function changeQty(item, d) {
+    var col = active();
+    item.qty += d;
+    if (item.qty <= 0) {
+      var rest = listOf(col).filter(function (i) { return i !== item; });
+      if (curKind === 'wish') state.wish = rest; else col.items = rest;
+    }
+    save(); renderCollection();
+  }
+  function moveToCollection(item) {
+    var col = active();
+    var items = listOf(col, 'items');
+    state.wish = listOf(col, 'wish').filter(function (i) { return i !== item; });
+    var ex = items.find(function (i) { return i.key === item.key; });
+    if (ex) {
+      ex.qty += item.qty;
+      if (item.price) ex.price = item.price;
+      if (typeof item.manual === 'number' && typeof ex.manual !== 'number') ex.manual = item.manual;
+    } else {
+      item.added = Date.now();
+      items.push(item);
+    }
+    save(); renderCollection();
+  }
+
+  /* ---------- Sammlung anzeigen ---------- */
+  function ebayUrl(item) {
+    var q = [item.name, item.set, item.number].filter(Boolean).join(' ');
+    return 'https://www.ebay.de/sch/i.html?_nkw=' + encodeURIComponent(q) + '&LH_Sold=1&LH_Complete=1';
+  }
+  /* Cardmarket sperrt Direktlinks über die Produkt-Nr. (Cloudflare), daher Suche nach dem Namen ohne Nummer. */
+  function cmUrl(item) {
+    return 'https://www.cardmarket.com/de/Pokemon/Products/Search?searchString=' + encodeURIComponent(item.name || '');
+  }
+  function numOf(item) {
+    var m = String(item.number || '').match(/\d+/);
+    return m ? parseInt(m[0], 10) : Number.MAX_SAFE_INTEGER;
+  }
+  function sortItems(items) {
+    var mode = state.sort || 'name';
+    var arr = items.slice();
+    function byName(a, b) { return a.name.localeCompare(b.name, 'de'); }
+    function val(i) { var u = unitPrice(i); return u ? u.value : null; }
+    function cmpPrice(a, b, dir, mult) {
+      var x = val(a), y = val(b);
+      if (x == null && y == null) return byName(a, b);
+      if (x == null) return 1;
+      if (y == null) return -1;
+      if (mult) { x *= a.qty; y *= b.qty; }
+      return (x === y) ? byName(a, b) : (dir === 'desc' ? y - x : x - y);
+    }
+    arr.sort(function (a, b) {
+      if (mode === 'price-desc') return cmpPrice(a, b, 'desc', false);
+      if (mode === 'price-asc') return cmpPrice(a, b, 'asc', false);
+      if (mode === 'value-desc') return cmpPrice(a, b, 'desc', true);
+      if (mode === 'set') {
+        var s = (a.set || '').localeCompare(b.set || '', 'de');
+        if (s) return s;
+        return (numOf(a) - numOf(b)) || byName(a, b);
+      }
+      if (mode === 'number') {
+        return (numOf(a) - numOf(b)) || (a.set || '').localeCompare(b.set || '', 'de') || byName(a, b);
+      }
+      if (mode === 'added') return (b.added || 0) - (a.added || 0);
+      return byName(a, b);
+    });
+    return arr;
+  }
+  function renderSelect() {
+    $('#manageName').textContent = active().name;
+    fillViewerColl();
+    var sel = $('#coll');
+    sel.replaceChildren();
+    state.collections.forEach(function (c) {
+      var o = el('option', { value: c.id, text: c.name + ' (' + c.items.reduce(function (n, i) { return n + i.qty; }, 0) + ')' });
+      if (c.id === active().id) o.selected = true;
+      sel.append(o);
+    });
+  }
+  function summarize(list) {
+    var r = { sum: 0, cards: 0, missing: 0 };
+    list.forEach(function (i) {
+      var u = unitPrice(i);
+      r.cards += i.qty;
+      if (u) r.sum += u.value * i.qty; else r.missing += i.qty;
+    });
+    return r;
+  }
+  function renderOverview(hide) {
+    var box = $('#overview');
+    box.hidden = hide;
+    if (hide) return;
+    var tot = { sum: 0, cards: 0, missing: 0 };
+    var rows = $('#ovList');
+    rows.replaceChildren();
+    state.collections.forEach(function (c) {
+      var r = summarize(listOf(c, 'items'));
+      tot.sum += r.sum; tot.cards += r.cards; tot.missing += r.missing;
+      rows.append(el('button', {
+        class: 'ovrow', type: 'button', 'aria-current': String(c.id === state.active),
+        onclick: function () { state.active = c.id; save(); renderCollection(); }
+      },
+        el('span', { class: 'nm', text: c.name + ' · ' + r.cards + ' Karten' }),
+        el('span', { class: 'v', text: money(r.sum) })));
+    });
+    $('#ovTotal').textContent = money(tot.sum);
+    $('#ovCards').textContent = String(tot.cards);
+    $('#ovCount').textContent = String(state.collections.length);
+    $('#ovMissing').textContent = tot.missing ? tot.missing + ' Karte(n) ohne Preis sind nicht enthalten' : '';
+  }
+  function renderCollection() {
+    renderSelect();
+    $('#sortSel').value = state.sort || 'name';
+    var col = active();
+    var wishMode = curKind === 'wish';
+    $('#kindTitle').textContent = wishMode ? 'Wunschliste' : 'Sammlung · ' + col.name;
+    $('#collManage').hidden = wishMode;
+    renderOverview(wishMode);
+    $('#valLabel').textContent = wishMode ? 'Gesamtpreis der Wunschliste' : 'Geschätzter Wert';
+    var sum = 0, cards = 0, missing = 0;
+    var list = $('#list');
+    list.replaceChildren();
+    sortItems(listOf(col)).forEach(function (item) {
+      var up = unitPrice(item);
+      cards += item.qty;
+      if (up) sum += up.value * item.qty; else missing += item.qty;
+
+      var priceTxt = el('div', { class: 'meta' });
+      if (up) priceTxt.append(money(up.value) + ' pro Karte' + (up.manual ? ' (eigener Preis)' : ''));
+      else priceTxt.append(el('span', { class: 'price none', text: 'Kein Preis, bitte eigenen eintragen' }));
+      if (!up || !up.manual) {
+        if (item.price && item.price.updated) priceTxt.append(' · Stand ' + String(item.price.updated).slice(0, 10));
+      }
+
+      var manual = el('input', {
+        type: 'number', min: '0', step: '0.01', inputmode: 'decimal',
+        placeholder: 'Eigener Preis €', 'aria-label': 'Eigener Preis für ' + item.name,
+        id: 'm-' + item.key.replace(/[^a-z0-9]/gi, '_')
+      });
+      if (typeof item.manual === 'number') manual.value = String(item.manual);
+      manual.addEventListener('change', function () {
+        var v = parseFloat(manual.value.replace(',', '.'));
+        item.manual = isFinite(v) && v >= 0 ? v : null;
+        save(); renderCollection();
+      });
+
+      var info = el('div', { style: 'min-width:0' },
+        el('div', { class: 'cname', text: item.name }),
+        el('div', { class: 'meta' },
+          el('span', { class: 'badge', text: item.lang }),
+          [item.set, item.number ? '#' + item.number : ''].filter(Boolean).join(' · ')),
+        priceTxt);
+
+      var ctrl = el('div', { class: 'ctrl' },
+        el('div', { class: 'qty' },
+          el('button', { type: 'button', 'aria-label': 'Weniger', text: '−', onclick: function () { changeQty(item, -1); } }),
+          el('span', { text: item.qty }),
+          el('button', { type: 'button', 'aria-label': 'Mehr', text: '+', onclick: function () { changeQty(item, 1); } })),
+        manual,
+        el('a', { class: 'btn small', href: ebayUrl(item), target: '_blank', rel: 'noopener', text: 'eBay verkauft' }),
+        el('a', { class: 'btn small', href: cmUrl(item), target: '_blank', rel: 'noopener', text: 'Cardmarket' }),
+        wishMode ? el('button', { class: 'btn small primary', type: 'button', text: 'In „' + col.name + '“', onclick: function () { moveToCollection(item); } }) : null,
+        el('span', { class: 'line', text: up ? money(up.value * item.qty) : '–' }));
+
+      var thumb = thumbNode({ image: item.image, name: item.name }, item.lang);
+      list.append(el('article', { class: 'item' }, thumb, info, ctrl));
+    });
+    if (!listOf(col).length) {
+      list.append(el('div', { class: 'empty', text: wishMode
+        ? 'Die Wunschliste ist leer. Suche eine Karte und wähle bei Hinzufügen „Wunschliste“.'
+        : 'Diese Sammlung ist leer. Suche eine Karte und tippe auf Hinzufügen.' }));
+    }
+    $('#total').textContent = money(sum);
+    $('#cardCount').textContent = String(cards);
+    $('#noPrice').textContent = missing ? missing + ' Karte(n) ohne Preis fließen nicht in den Wert ein' : '';
+    function countOf(kind) { return listOf(col, kind).reduce(function (n, i) { return n + i.qty; }, 0); }
+    var cItems = countOf('items'), cWish = countOf('wish');
+    $('#countBadge').textContent = cItems ? '(' + cItems + ')' : '';
+    $('#wishBadge').textContent = cWish ? '(' + cWish + ')' : '';
+  }
+
+  /* ---------- Preise aktualisieren ---------- */
+  function refreshPrices() {
+    var col = active();
+    var items = listOf(col).slice();
+    if (!items.length) return;
+    var done = 0, failed = 0;
+    var s = $('#collStatus');
+    s.className = 'status';
+    s.textContent = 'Aktualisiere 0 von ' + items.length + ' …';
+    $('#refresh').disabled = true;
+    pool(items.map(function (item) {
+      return function () {
+        return getCard(item.lang, item.id, true).then(function (card) {
+          var p = priceFrom(card);
+          item.price = p;
+        }).catch(function () { failed++; }).then(function () {
+          done++;
+          s.textContent = 'Aktualisiere ' + done + ' von ' + items.length + ' …';
+        });
+      };
+    }), 6).then(function () {
+      save(); renderCollection();
+      $('#refresh').disabled = false;
+      s.className = 'status' + (failed ? ' err' : '');
+      s.textContent = failed ? (failed + ' Karte(n) konnten nicht aktualisiert werden.') : 'Preise sind aktuell.';
+    });
+  }
+
+  /* ---------- Export / Import ---------- */
+  function download(name, text, type) {
+    var url = URL.createObjectURL(new Blob([text], { type: type }));
+    var a = el('a', { href: url, download: name });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+  }
+  function exportJson() { download('pokesammlung.json', JSON.stringify(state, null, 2), 'application/json'); }
+  function exportCsv() {
+    var col = active();
+    var rows = [['Name', 'Set', 'Nummer', 'Sprache', 'Anzahl', 'Preis pro Karte EUR', 'Quelle']];
+    listOf(col).forEach(function (i) {
+      var up = unitPrice(i);
+      rows.push([i.name, i.set, i.number, i.lang, i.qty, up ? String(up.value).replace('.', ',') : '', up ? (up.manual ? 'eigener Preis' : 'Cardmarket') : '']);
+    });
+    var csv = rows.map(function (r) {
+      return r.map(function (c) { return '"' + String(c == null ? '' : c).replace(/"/g, '""') + '"'; }).join(';');
+    }).join('\r\n');
+    download(col.name.replace(/[^\w\-]+/g, '_') + (curKind === 'wish' ? '_wunschliste' : '') + '.csv', '﻿' + csv, 'text/csv;charset=utf-8');
+  }
+  function importJson(file) {
+    var s = $('#collStatus');
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        var data = JSON.parse(String(reader.result));
+        if (!data || !Array.isArray(data.collections) || !data.collections.length) throw new Error('Format');
+        data.collections.forEach(function (c) {
+          if (!c.id) c.id = uid();
+          if (!Array.isArray(c.items)) c.items = [];
+        });
+        state = migrateWish({ collections: data.collections, active: data.active || data.collections[0].id, lang: data.lang || 'de', wish: data.wish });
+        save(); renderLangs(); renderCollection();
+        s.className = 'status'; s.textContent = 'Import abgeschlossen.';
+      } catch (e) {
+        s.className = 'status err'; s.textContent = 'Die Datei ist keine gültige Pokésammlung-Sicherung.';
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  /* ---------- Sammlungsverwaltung ---------- */
+  var nameMode = null;
+  function showNameForm(mode) {
+    nameMode = mode;
+    $('#nameForm').hidden = false;
+    $('#nameInput').value = mode === 'rename' ? active().name : '';
+    $('#nameInput').focus();
+  }
+  function hideNameForm() { $('#nameForm').hidden = true; nameMode = null; }
+  var delArmed = false, delTimer = null;
+
+  /* ---------- Ereignisse ---------- */
+  $('#searchForm').addEventListener('submit', function (e) { e.preventDefault(); search(); });
+  $('#moreBtn').addEventListener('click', function () { more(state.lang, token); });
+  $('#coll').addEventListener('change', function (e) { state.active = e.target.value; save(); renderCollection(); });
+  $('#newColl').addEventListener('click', function () { showNameForm('new'); });
+  $('#renColl').addEventListener('click', function () { showNameForm('rename'); });
+  $('#nameCancel').addEventListener('click', hideNameForm);
+  $('#nameForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var name = $('#nameInput').value.trim();
+    if (!name) return;
+    if (nameMode === 'new') {
+      var c = { id: uid(), name: name, items: [] };
+      state.collections.push(c);
+      state.active = c.id;
+    } else if (nameMode === 'rename') {
+      active().name = name;
+    }
+    save(); hideNameForm(); renderCollection();
+  });
+  $('#delColl').addEventListener('click', function () {
+    var b = $('#delColl');
+    if (state.collections.length < 2) { b.textContent = 'Mind. 1 nötig'; setTimeout(function () { b.textContent = 'Löschen'; }, 1500); return; }
+    if (!delArmed) {
+      delArmed = true; b.textContent = 'Wirklich löschen?';
+      delTimer = setTimeout(function () { delArmed = false; b.textContent = 'Löschen'; }, 3000);
+      return;
+    }
+    clearTimeout(delTimer); delArmed = false; b.textContent = 'Löschen';
+    var id = active().id;
+    state.collections = state.collections.filter(function (c) { return c.id !== id; });
+    state.active = state.collections[0].id;
+    save(); renderCollection();
+  });
+  $('#sortSel').addEventListener('change', function (e) { state.sort = e.target.value; save(); renderCollection(); });
+  $('#refresh').addEventListener('click', refreshPrices);
+  $('#exportJson').addEventListener('click', exportJson);
+  $('#exportCsv').addEventListener('click', exportCsv);
+  $('#importFile').addEventListener('change', function (e) { if (e.target.files[0]) importJson(e.target.files[0]); e.target.value = ''; });
+
+  function showView(v) {
+    var s = v === 'search';
+    $('#view-search').hidden = !s;
+    $('#view-coll').hidden = s;
+    if (!s) {
+      curKind = v === 'wish' ? 'wish' : 'items';
+      $('#view-coll').setAttribute('data-kind', curKind);
+      $('#collStatus').textContent = '';
+      renderCollection();
+    }
+    $('#tab-search').setAttribute('aria-selected', String(s));
+    $('#tab-coll').setAttribute('aria-selected', String(v === 'items'));
+    $('#tab-wish').setAttribute('aria-selected', String(v === 'wish'));
+  }
+  $('#tab-search').addEventListener('click', function () { showView('search'); });
+  $('#tab-coll').addEventListener('click', function () { showView('items'); });
+  $('#tab-wish').addEventListener('click', function () { showView('wish'); });
+
+  /* ---------- Kartenansicht (Vergrößern, Blättern) ---------- */
+  var vIndex = -1, vZoom = false, vDetail = null, vMsgTimer = null;
+  function viewerOpen() { return !$('#lb').hidden; }
+  function fillViewerColl() {
+    var sel = $('#lbColl');
+    var keep = sel.value || state.active;
+    sel.replaceChildren();
+    state.collections.forEach(function (c) { sel.append(el('option', { value: c.id, text: c.name })); });
+    sel.value = collById(keep) ? keep : state.active;
+    sel.hidden = state.collections.length < 2;
+  }
+  function setZoom(on, fx, fy) {
+    vZoom = !!on;
+    var stage = $('#lbStage');
+    stage.classList.toggle('zoomed', vZoom);
+    if (vZoom) {
+      var img = $('#lbImg');
+      stage.scrollLeft = (fx == null ? 0.5 : fx) * img.offsetWidth - stage.clientWidth / 2;
+      stage.scrollTop = (fy == null ? 0.5 : fy) * img.offsetHeight - stage.clientHeight / 2;
+    } else {
+      stage.scrollLeft = 0; stage.scrollTop = 0;
+    }
+    $('#lbZoom').textContent = vZoom ? 'Verkleinern' : 'Vergrößern';
+  }
+  function loadViewerImage(imageBase, lang) {
+    var img = $('#lbImg'), none = $('#lbNoImg');
+    if (!imageBase) { img.removeAttribute('src'); img.hidden = true; none.hidden = false; return; }
+    none.hidden = true; img.hidden = false;
+    var urls = [imageBase + '/high.webp', imageBase + '/low.webp'];
+    if (lang === 'de' && enVariant(imageBase) !== imageBase) urls.push(enVariant(imageBase) + '/high.webp', enVariant(imageBase) + '/low.webp');
+    var k = 0;
+    img.onerror = function () {
+      k++;
+      if (k < urls.length) img.src = urls[k];
+      else { img.hidden = true; none.hidden = false; }
+    };
+    img.src = urls[0];
+  }
+  function showCard(i) {
+    vIndex = i; vDetail = null;
+    setZoom(false);
+    var base = results[i], lang = state.lang;
+    $('#lbImg').alt = base.name || '';
+    $('#lbTitle').textContent = base.name || base.id;
+    loadViewerImage(base.image, lang);
+    var pos = (i + 1) + ' von ' + results.length;
+    $('#lbMeta').textContent = pos + ' · #' + (base.localId || '');
+    var pl = $('#lbPrice');
+    pl.textContent = 'Preis lädt …'; pl.className = 'price none';
+    $('#lbMsg').textContent = '';
+    $('#lbPrev').disabled = i <= 0;
+    $('#lbNext').disabled = i >= results.length - 1;
+    getCard(lang, base.id).then(function (card) {
+      if (vIndex !== i) return;
+      vDetail = card;
+      if (!base.image) {
+        var useImage = function (u) { if (u && vIndex === i) { base.image = u; loadViewerImage(u, lang); } };
+        if (card.image) useImage(card.image);
+        else if (lang === 'de') getCard('en', base.id).then(function (c) { useImage(c && c.image); }).catch(function () {});
+      }
+      var setName = card.set && card.set.name ? card.set.name : '';
+      var total = card.set && card.set.cardCount && card.set.cardCount.official;
+      $('#lbMeta').textContent = pos + ' · ' + [setName, '#' + (card.localId || base.localId || '') + (total ? '/' + total : '')].filter(Boolean).join(' · ');
+      var p = priceFrom(card);
+      if (p) { pl.textContent = money(p.value) + ' (Cardmarket)'; pl.className = 'price'; }
+      else { pl.textContent = 'Kein Preis vorhanden'; pl.className = 'price none'; }
+    }).catch(function () {
+      if (vIndex !== i) return;
+      pl.textContent = 'Details nicht ladbar'; pl.className = 'price none';
+    });
+    [i - 1, i + 1].forEach(function (j) {
+      if (j < 0 || j >= results.length) return;
+      getCard(lang, results[j].id).catch(function () {});
+      if (results[j].image) { var pre = new Image(); pre.src = results[j].image + '/high.webp'; }
+    });
+  }
+  function openViewer(i) {
+    if (i < 0 || i >= results.length) return;
+    $('#lb').hidden = false;
+    document.body.style.overflow = 'hidden';
+    showCard(i);
+    $('#lbClose').focus();
+  }
+  function closeViewer() {
+    $('#lb').hidden = true;
+    document.body.style.overflow = '';
+    setZoom(false);
+  }
+  function step(d) {
+    var j = vIndex + d;
+    if (j >= 0 && j < results.length) showCard(j);
+  }
+  function viewerAdd(kind) {
+    var base = results[vIndex];
+    if (!base) return;
+    var m = $('#lbMsg');
+    m.textContent = 'Wird gespeichert …';
+    var colId = kind === 'wish' ? null : ($('#lbColl').value || state.active);
+    addByBase(state.lang, base, kind, vDetail, colId).then(function (noPrice) {
+      m.textContent = savedText(kind, colId, noPrice);
+      clearTimeout(vMsgTimer);
+      vMsgTimer = setTimeout(function () { m.textContent = ''; }, 2000);
+    });
+  }
+  $('#lbClose').addEventListener('click', closeViewer);
+  $('#lbPrev').addEventListener('click', function () { step(-1); });
+  $('#lbNext').addEventListener('click', function () { step(1); });
+  $('#lbZoom').addEventListener('click', function () { setZoom(!vZoom); });
+  $('#lbAddItems').addEventListener('click', function () { viewerAdd('items'); });
+  $('#lbAddWish').addEventListener('click', function () { viewerAdd('wish'); });
+  $('#lbImg').addEventListener('click', function (e) {
+    var r = this.getBoundingClientRect();
+    setZoom(!vZoom, (e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
+  });
+  document.addEventListener('keydown', function (e) {
+    if (!viewerOpen()) return;
+    if (e.key === 'ArrowLeft') { e.preventDefault(); step(-1); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); step(1); }
+    else if (e.key === 'Escape') closeViewer();
+    else if (e.key === '+' || e.key === '=') setZoom(true);
+    else if (e.key === '-') setZoom(false);
+  });
+  var touchX = null, touchY = 0;
+  $('#lbStage').addEventListener('touchstart', function (e) {
+    if (e.touches.length !== 1) { touchX = null; return; }
+    touchX = e.touches[0].clientX; touchY = e.touches[0].clientY;
+  }, { passive: true });
+  $('#lbStage').addEventListener('touchend', function (e) {
+    if (touchX == null || vZoom) { touchX = null; return; }
+    var t = e.changedTouches[0];
+    var dx = t.clientX - touchX, dy = t.clientY - touchY;
+    touchX = null;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) step(dx < 0 ? 1 : -1);
+  }, { passive: true });
+
+  $('#setFilter').addEventListener('input', function () {
+    renderSetOptions();
+    clearTimeout(autoTimer);
+    var f = this.value.trim();
+    var ms = matchingSets();
+    if (f.length >= 3 && ms.length === 1) {
+      autoTimer = setTimeout(function () {
+        if ($('#setFilter').value.trim() === f) chooseSet(ms[0].id);
+      }, 500);
+    }
+  });
+  $('#setFilter').addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    var ms = matchingSets();
+    if (ms.length) { clearTimeout(autoTimer); chooseSet(ms[0].id); }
+  });
+  $('#setSel').addEventListener('change', function (e) {
+    curSet = e.target.value;
+    if (curSet) showSet();
+    else if ($('#q').value.trim()) search();
+    else { token++; results = []; $('#results').replaceChildren(); $('#moreBtn').hidden = true; setStatus('Wähle ein Set oder gib einen Kartennamen ein.'); }
+  });
+
+  renderLangs();
+  renderCollection();
+  loadSets();
+})();
+</script>
+<script>
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+  window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+}
+</script>
+</body>
+</html>
