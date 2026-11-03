@@ -120,12 +120,22 @@ a{color:var(--accent)}
   .item .ctrl{grid-column:auto;justify-content:flex-end}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+.syncbox{margin-bottom:12px}
+.syncform{display:flex;flex-direction:column;gap:8px}
+.syncform input{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 10px;width:100%;min-width:0}
+.syncchoices{display:flex;flex-direction:column;gap:8px;margin:10px 0}
+.syncchoices .btn{white-space:normal;text-align:left}
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>Pokésammlung</h1>
   <p class="sub">Karten auf Deutsch, Englisch, Japanisch, Koreanisch und Chinesisch suchen, in Sammlungen speichern und mit Cardmarket-Preisen bewerten.</p>
+
+  <details class="manage syncbox" id="syncBox">
+    <summary id="syncSummary">Synchronisation</summary>
+    <div id="syncBody"></div>
+  </details>
 
   <div class="tabs" role="tablist">
     <button role="tab" id="tab-search" aria-selected="true" aria-controls="view-search" type="button">Suche</button>
@@ -294,7 +304,10 @@ a{color:var(--accent)}
     });
     return st;
   }
-  function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+    try { if (window.PokeApp && typeof window.PokeApp.onSave === 'function') window.PokeApp.onSave(); } catch (e) {}
+  }
   function active() {
     return state.collections.find(function (c) { return c.id === state.active; }) || state.collections[0];
   }
@@ -1212,11 +1225,32 @@ a{color:var(--accent)}
     else { token++; results = []; $('#results').replaceChildren(); $('#moreBtn').hidden = true; setStatus('Wähle ein Set oder gib einen Kartennamen ein.'); }
   });
 
+  /* Schnittstelle für die Synchronisation (sync.js) */
+  window.PokeApp = {
+    getState: function () { return state; },
+    applyState: function (next) {
+      var keepActive = state.active;
+      next.lang = state.lang; next.sort = state.sort;
+      if (!Array.isArray(next.collections) || !next.collections.length) {
+        next.collections = [{ id: uid(), name: 'Meine Sammlung', items: [] }];
+      }
+      next.collections.forEach(function (c) { if (!Array.isArray(c.items)) c.items = []; });
+      next.active = next.collections.some(function (c) { return c.id === keepActive; }) ? keepActive : next.collections[0].id;
+      next.wish = Array.isArray(next.wish) ? next.wish : [];
+      state = next;
+      try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+      renderCollection();
+    },
+    onSave: null
+  };
+
   renderLangs();
   renderCollection();
   loadSets();
 })();
 </script>
+<script src="firebase-config.js"></script>
+<script src="sync.js"></script>
 <script>
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
   window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
