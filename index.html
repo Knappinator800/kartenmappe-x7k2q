@@ -329,7 +329,13 @@ a{color:var(--accent)}
   /* ---------- Preise ---------- */
   /* Varianten: 'normal' = Standardpreis der Karte (bei Holo-Raritäten die Holo-Karte selbst),
      'reverse' = Reverse-Holo-Preis (bei TCGdex die Felder mit Endung „-holo“). */
-  var VARIANT_LABEL = { normal: 'Normal / Holo', reverse: 'Reverse Holo' };
+  function baseLabel(card) {
+    var v = card && card.variants;
+    if (v && v.holo && !v.normal) return 'Holo';
+    if (v && v.normal && !v.holo) return 'Normal';
+    return 'Normal / Holo';
+  }
+  function variantLabel(v, base) { return v === 'reverse' ? 'Reverse Holo' : (base || 'Normal / Holo'); }
   function variantOf(item) { return item && item.variant === 'reverse' ? 'reverse' : 'normal'; }
   function itemKey(lang, id, variant) { return lang + ':' + id + (variant === 'reverse' ? ':reverse' : ''); }
   function cmOf(card) { return card && card.pricing && card.pricing.cardmarket || null; }
@@ -358,7 +364,7 @@ a{color:var(--accent)}
     if (!hasReverse(card)) { sel.hidden = true; return false; }
     ['normal', 'reverse'].forEach(function (v) {
       var p = priceFrom(card, v);
-      sel.append(el('option', { value: v, text: VARIANT_LABEL[v] + ' · ' + (p ? money(p.value) : 'kein Preis') }));
+      sel.append(el('option', { value: v, text: variantLabel(v, baseLabel(card)) + ' · ' + (p ? money(p.value) : 'kein Preis') }));
     });
     sel.value = current || 'normal';
     sel.hidden = false;
@@ -783,7 +789,7 @@ a{color:var(--accent)}
         key: key, id: card.id, lang: lang, name: card.name || card.id,
         set: card.set && card.set.name ? card.set.name : '',
         number: (card.localId || '') + (total ? '/' + total : ''),
-        image: card.image || '', qty: 1, variant: variant, rev: hasReverse(card),
+        image: card.image || '', qty: 1, variant: variant, rev: hasReverse(card), base: baseLabel(card),
         price: priceFrom(card, variant), manual: null, added: Date.now()
       });
     }
@@ -811,6 +817,7 @@ a{color:var(--accent)}
     getCard(item.lang, item.id).then(function (card) {
       item.price = priceFrom(card, v);
       item.rev = hasReverse(card);
+      item.base = baseLabel(card);
     }).catch(function () {}).then(function () { save(); renderCollection(); });
   }
   function changeQty(item, d) {
@@ -970,7 +977,7 @@ a{color:var(--accent)}
       var varSel = null;
       if (item.rev !== false || variantOf(item) === 'reverse') {
         varSel = el('select', { class: 'vsel', 'aria-label': 'Variante für ' + item.name });
-        ['normal', 'reverse'].forEach(function (v) { varSel.append(el('option', { value: v, text: VARIANT_LABEL[v] })); });
+        ['normal', 'reverse'].forEach(function (v) { varSel.append(el('option', { value: v, text: variantLabel(v, item.base) })); });
         varSel.value = variantOf(item);
         varSel.addEventListener('change', function () { changeVariant(item, varSel.value); });
       }
@@ -1019,6 +1026,7 @@ a{color:var(--accent)}
         return getCard(item.lang, item.id, true).then(function (card) {
           item.price = priceFrom(card, variantOf(item));
           item.rev = hasReverse(card);
+          item.base = baseLabel(card);
         }).catch(function () { failed++; }).then(function () {
           done++;
           s.textContent = 'Aktualisiere ' + done + ' von ' + items.length + ' …';
@@ -1045,7 +1053,7 @@ a{color:var(--accent)}
     var rows = [['Name', 'Set', 'Nummer', 'Sprache', 'Variante', 'Anzahl', 'Preis pro Karte EUR', 'Quelle']];
     listOf(col).forEach(function (i) {
       var up = unitPrice(i);
-      rows.push([i.name, i.set, i.number, i.lang, VARIANT_LABEL[variantOf(i)], i.qty, up ? String(up.value).replace('.', ',') : '', up ? (up.manual ? 'eigener Preis' : 'Cardmarket') : '']);
+      rows.push([i.name, i.set, i.number, i.lang, variantLabel(variantOf(i), i.base), i.qty, up ? String(up.value).replace('.', ',') : '', up ? (up.manual ? 'eigener Preis' : 'Cardmarket') : '']);
     });
     var csv = rows.map(function (r) {
       return r.map(function (c) { return '"' + String(c == null ? '' : c).replace(/"/g, '""') + '"'; }).join(';');
