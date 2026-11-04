@@ -101,6 +101,7 @@ a{color:var(--accent)}
 .empty{padding:28px 12px;text-align:center;color:var(--muted)}
 .lb{position:fixed;inset:0;z-index:50;background:var(--scrim);color:var(--lb-ink);display:flex;flex-direction:column;gap:8px;padding:max(10px,env(safe-area-inset-top,0px)) max(12px,env(safe-area-inset-right,0px)) max(10px,env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px))}
 .lb[hidden]{display:none}
+.lb.saved #lbAddItems,.lb.saved #lbAddWish,.lb.saved #lbVar,.lb.saved #lbColl{display:none!important}
 .lb-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .lb-title{font-weight:600;min-width:0;overflow-wrap:anywhere}
 .lb-main{flex:1;min-height:0;display:flex;align-items:stretch;gap:6px}
@@ -942,7 +943,8 @@ a{color:var(--accent)}
     var sum = 0, cards = 0, missing = 0;
     var list = $('#list');
     list.replaceChildren();
-    sortItems(listOf(col)).forEach(function (item) {
+    var shownItems = sortItems(listOf(col));
+    shownItems.forEach(function (item, idx) {
       var up = unitPrice(item);
       cards += item.qty;
       if (up) sum += up.value * item.qty; else missing += item.qty;
@@ -995,7 +997,11 @@ a{color:var(--accent)}
         el('span', { class: 'line', text: up ? money(up.value * item.qty) : '–' }));
 
       var thumb = thumbNode({ image: item.image, name: item.name }, item.lang);
-      list.append(el('article', { class: 'item' }, thumb, info, ctrl));
+      var zoomBtn = el('button', {
+        class: 'thumbbtn', type: 'button', 'aria-label': 'Karte vergrößern: ' + item.name,
+        onclick: function () { openSaved(shownItems, idx); }
+      }, thumb);
+      list.append(el('article', { class: 'item' }, zoomBtn, info, ctrl));
     });
     if (!listOf(col).length) {
       list.append(el('div', { class: 'empty', text: wishMode
@@ -1151,7 +1157,8 @@ a{color:var(--accent)}
   $('#tab-wish').addEventListener('click', function () { showView('wish'); });
 
   /* ---------- Kartenansicht (Vergrößern, Blättern) ---------- */
-  var vIndex = -1, vZoom = false, vDetail = null, vMsgTimer = null, vVariant = 'normal';
+  var vIndex = -1, vZoom = false, vDetail = null, vMsgTimer = null, vVariant = 'normal', vMode = 'search', vSaved = [];
+  function vLen() { return vMode === 'saved' ? vSaved.length : results.length; }
   function showViewerPrice() {
     var pl = $('#lbPrice');
     var p = vDetail ? priceFrom(vDetail, vVariant) : null;
@@ -1194,7 +1201,46 @@ a{color:var(--accent)}
     };
     img.src = urls[0];
   }
+  /* Gespeicherte Karte (Sammlung oder Wunschliste) groß ansehen, ohne Hinzufügen-Knöpfe. */
+  function showSaved(i) {
+    vIndex = i; vDetail = null; vVariant = 'normal';
+    setZoom(false);
+    var item = vSaved[i];
+    $('#lbImg').alt = item.name || '';
+    $('#lbTitle').textContent = item.name || item.id;
+    loadViewerImage(item.image, item.lang);
+    if (!item.image) {
+      getCard(item.lang, item.id).then(function (c) {
+        if (c && c.image && vMode === 'saved' && vIndex === i) { item.image = c.image; loadViewerImage(c.image, item.lang); }
+      }).catch(function () {});
+    }
+    var info = [item.set, item.number ? '#' + item.number : ''].filter(Boolean).join(' · ');
+    if (variantOf(item) === 'reverse') info += ' · Reverse Holo';
+    $('#lbMeta').textContent = (i + 1) + ' von ' + vSaved.length + ' · ' + info;
+    var pl = $('#lbPrice'), up = unitPrice(item);
+    if (up) {
+      pl.textContent = money(up.value) + (up.manual ? ' (eigener Preis)' : ' (Cardmarket)') +
+        (item.qty > 1 ? ' · ' + item.qty + ' Stück = ' + money(up.value * item.qty) : '');
+      pl.className = 'price';
+    } else { pl.textContent = 'Kein Preis vorhanden'; pl.className = 'price none'; }
+    $('#lbMsg').textContent = '';
+    $('#lbPrev').disabled = i <= 0;
+    $('#lbNext').disabled = i >= vSaved.length - 1;
+    [i - 1, i + 1].forEach(function (j) {
+      if (j >= 0 && j < vSaved.length && vSaved[j].image) { var pre = new Image(); pre.src = vSaved[j].image + '/high.webp'; }
+    });
+  }
+  function openSaved(items, i) {
+    if (i < 0 || i >= items.length) return;
+    vMode = 'saved'; vSaved = items;
+    $('#lb').classList.add('saved');
+    $('#lb').hidden = false;
+    document.body.style.overflow = 'hidden';
+    showSaved(i);
+    $('#lbClose').focus();
+  }
   function showCard(i) {
+    if (vMode === 'saved') { showSaved(i); return; }
     vIndex = i; vDetail = null; vVariant = 'normal';
     $('#lbVar').hidden = true;
     setZoom(false);
@@ -1234,6 +1280,8 @@ a{color:var(--accent)}
   }
   function openViewer(i) {
     if (i < 0 || i >= results.length) return;
+    vMode = 'search';
+    $('#lb').classList.remove('saved');
     $('#lb').hidden = false;
     document.body.style.overflow = 'hidden';
     showCard(i);
@@ -1246,7 +1294,7 @@ a{color:var(--accent)}
   }
   function step(d) {
     var j = vIndex + d;
-    if (j >= 0 && j < results.length) showCard(j);
+    if (j >= 0 && j < vLen()) showCard(j);
   }
   function viewerAdd(kind) {
     var base = results[vIndex];
