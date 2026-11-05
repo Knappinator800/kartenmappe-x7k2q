@@ -123,6 +123,13 @@ a{color:var(--accent)}
   .item .ctrl{grid-column:auto;justify-content:flex-end}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:max(16px,env(safe-area-inset-bottom,0px));z-index:60;max-width:min(92vw,520px);display:flex;gap:14px;align-items:center;background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.3);font-size:.92rem}
+.toast[hidden]{display:none}
+.toast button{background:none;border:0;color:inherit;font-weight:700;text-decoration:underline;padding:4px 2px;white-space:nowrap}
+.importbox{margin-top:10px;display:flex;flex-direction:column;gap:10px}
+.importbox[hidden]{display:none}
+.importbox .opt{display:flex;flex-direction:column;gap:3px}
+.importbox .opt .btn{align-self:flex-start;white-space:normal;text-align:left}
 .syncbox{margin-bottom:12px}
 .syncform{display:flex;flex-direction:column;gap:8px}
 .syncform input{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 10px;width:100%;min-width:0}
@@ -216,12 +223,18 @@ a{color:var(--accent)}
           <input id="importFile" type="file" accept="application/json,.json" hidden>
         </div>
         <div id="collStatus" class="status" role="status" aria-live="polite"></div>
+        <div id="importBox" class="importbox" hidden></div>
       </div>
       <div id="list" class="list"></div>
     </section>
   </main>
 
-  <p class="note">Preise stammen aus den Cardmarket-Daten der TCGdex-API (Trend, sonst Durchschnitt). Für Karten ohne Preis, etwa viele koreanische und chinesische, trägst du einen eigenen Preis ein. Die eBay-Links öffnen die Suche nach verkauften Artikeln, eBay-Preise werden nicht automatisch übernommen. Tippe in den Suchergebnissen auf eine Karte, um sie zu vergrößern, und blättere mit den Pfeilen oder per Wischen weiter. Die Wunschliste ist unabhängig von deinen Sammlungen. Alles liegt nur in diesem Browser; sichere es über Export JSON.</p>
+  <p class="note">Preise stammen aus den Cardmarket-Daten der TCGdex-API (Trend, sonst Durchschnitt). Für Karten ohne Preis, etwa viele koreanische und chinesische, trägst du einen eigenen Preis ein. Die eBay-Links öffnen die Suche nach verkauften Artikeln, eBay-Preise werden nicht automatisch übernommen. Tippe in den Suchergebnissen auf eine Karte, um sie zu vergrößern, und blättere mit den Pfeilen oder per Wischen weiter. Die Wunschliste ist unabhängig von deinen Sammlungen. Deine Daten liegen auf diesem Gerät. Mit einem Konto unter „Synchronisation“ werden sie auf deine anderen Geräte übertragen. Zusätzlich kannst du sie über Export JSON sichern.</p>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden>
+  <span id="toastMsg"></span>
+  <button id="toastUndo" type="button">Rückgängig</button>
 </div>
 
 <div id="lb" class="lb" role="dialog" aria-modal="true" aria-label="Kartenansicht" hidden>
@@ -308,7 +321,9 @@ a{color:var(--accent)}
     });
     return st;
   }
+  var ver = 0; /* zählt jede Änderung, damit „Rückgängig“ nur gilt, solange nichts dazwischen geändert wurde */
   function save() {
+    ver++;
     try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
     try { if (window.PokeApp && typeof window.PokeApp.onSave === 'function') window.PokeApp.onSave(); } catch (e) {}
   }
@@ -664,13 +679,19 @@ a{color:var(--accent)}
   }
   /* Deutsche Bilder fehlen bei manchen Sets; dann das englische Bild derselben Karte zeigen. */
   function enVariant(url) { return String(url).replace('/de/', '/en/'); }
+  /* Bildadressen: TCGdex liefert eine Basis (… + /low.webp); fertige Bilddateien bleiben unverändert. */
+  function imageUrls(base, lang, sizes) {
+    if (/\.(webp|png|jpe?g|gif)(\?.*)?$/i.test(String(base))) return [base];
+    var urls = sizes.map(function (z) { return base + '/' + z + '.webp'; });
+    if (lang === 'de' && enVariant(base) !== base) sizes.forEach(function (z) { urls.push(enVariant(base) + '/' + z + '.webp'); });
+    return urls;
+  }
   function thumbNode(card, lang) {
     var t = el('div', { class: 'thumb' });
     function build(imageBase) {
       t.textContent = '';
       if (!imageBase) { t.textContent = 'Kein Bild'; return; }
-      var urls = [imageBase + '/low.webp'];
-      if (lang === 'de' && enVariant(imageBase) !== imageBase) urls.push(enVariant(imageBase) + '/low.webp');
+      var urls = imageUrls(imageBase, lang, ['low']);
       var img = el('img', { alt: (card && card.name) || '', loading: 'lazy' });
       var k = 0;
       img.addEventListener('error', function () {
@@ -821,14 +842,39 @@ a{color:var(--accent)}
       item.base = baseLabel(card);
     }).catch(function () {}).then(function () { save(); renderCollection(); });
   }
+  /* ---------- Rückgängig ---------- */
+  var undoSnap = null, undoVer = -1, toastTimer = null;
+  function showToast(msg, withUndo) {
+    $('#toastMsg').textContent = msg;
+    $('#toastUndo').hidden = !withUndo;
+    $('#toast').hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(hideToast, withUndo ? 6000 : 3000);
+  }
+  function hideToast() { $('#toast').hidden = true; clearTimeout(toastTimer); }
+  /* Nach der Änderung und nach save() aufrufen; snap ist der Stand davor. */
+  function offerUndo(msg, snap) {
+    undoSnap = snap; undoVer = ver;
+    showToast(msg, true);
+  }
+  function doUndo() {
+    if (!undoSnap) return;
+    if (ver !== undoVer) { undoSnap = null; showToast('Rückgängig ist nicht mehr möglich, weil sich inzwischen etwas geändert hat.', false); return; }
+    try { state = JSON.parse(undoSnap); } catch (e) { return; }
+    undoSnap = null;
+    save(); renderLangs(); renderCollection();
+    showToast('Wiederhergestellt.', false);
+  }
   function changeQty(item, d) {
     var col = active();
+    var snap = item.qty + d <= 0 ? JSON.stringify(state) : null;
     item.qty += d;
     if (item.qty <= 0) {
       var rest = listOf(col).filter(function (i) { return i !== item; });
       if (curKind === 'wish') state.wish = rest; else col.items = rest;
     }
     save(); renderCollection();
+    if (snap) offerUndo('„' + item.name + '“ entfernt', snap);
   }
   function moveToCollection(item) {
     var col = active();
@@ -1066,6 +1112,14 @@ a{color:var(--accent)}
     }).join('\r\n');
     download(col.name.replace(/[^\w\-]+/g, '_') + (curKind === 'wish' ? '_wunschliste' : '') + '.csv', '﻿' + csv, 'text/csv;charset=utf-8');
   }
+  /* Import: Datei prüfen, dann den Weg wählen lassen (addieren, nur fehlende, ersetzen). */
+  var pendingImport = null;
+  function cleanItems(list) {
+    return (Array.isArray(list) ? list : []).filter(function (i) { return i && i.key && i.id && i.lang; }).map(function (i) {
+      i.qty = Math.max(1, Math.floor(Number(i.qty) || 1));
+      return i;
+    });
+  }
   function importJson(file) {
     var s = $('#collStatus');
     var reader = new FileReader();
@@ -1073,18 +1127,84 @@ a{color:var(--accent)}
       try {
         var data = JSON.parse(String(reader.result));
         if (!data || !Array.isArray(data.collections) || !data.collections.length) throw new Error('Format');
-        data.collections.forEach(function (c) {
+        var imp = migrateWish({ collections: data.collections, wish: data.wish });
+        imp.collections.forEach(function (c) {
           if (!c.id) c.id = uid();
-          if (!Array.isArray(c.items)) c.items = [];
+          if (!c.name) c.name = 'Importierte Sammlung';
+          c.items = cleanItems(c.items);
         });
-        state = migrateWish({ collections: data.collections, active: data.active || data.collections[0].id, lang: data.lang || 'de', wish: data.wish });
-        save(); renderLangs(); renderCollection();
-        s.className = 'status'; s.textContent = 'Import abgeschlossen.';
+        imp.wish = cleanItems(imp.wish);
+        imp.active = data.active;
+        pendingImport = imp;
+        s.className = 'status'; s.textContent = '';
+        showImportBox();
       } catch (e) {
+        pendingImport = null; $('#importBox').hidden = true;
         s.className = 'status err'; s.textContent = 'Die Datei ist keine gültige Pokésammlung-Sicherung.';
       }
     };
     reader.readAsText(file);
+  }
+  function sumQty(list) { return list.reduce(function (n, i) { return n + i.qty; }, 0); }
+  function showImportBox() {
+    var imp = pendingImport, box = $('#importBox');
+    if (!imp) { box.hidden = true; return; }
+    var cards = imp.collections.reduce(function (n, c) { return n + sumQty(c.items); }, 0);
+    function opt(label, text, mode, danger) {
+      return el('div', { class: 'opt' },
+        el('button', { class: 'btn small' + (danger ? ' danger' : ' primary'), type: 'button', text: label, onclick: function () { applyImport(mode); } }),
+        el('div', { class: 'meta', text: text }));
+    }
+    box.replaceChildren(
+      el('div', { class: 'cname', text: 'Datei gefunden: ' + imp.collections.length + ' Sammlung(en), ' + cards + ' Karten, ' + sumQty(imp.wish) + ' auf der Wunschliste' }),
+      el('div', { class: 'meta', text: 'Wie soll die Datei übernommen werden?' }),
+      opt('Mengen addieren', 'Neue Karten kommen dazu. Karten, die du schon hast, werden aufaddiert (2 und 1 ergeben 3).', 'add', false),
+      opt('Nur fehlende ergänzen', 'Nur Karten, die du noch nicht hast, kommen dazu. Vorhandene bleiben unverändert.', 'missing', false),
+      opt('Alles ersetzen', 'Deine jetzigen Sammlungen und die Wunschliste werden komplett durch die Datei ersetzt. Bei aktiver Synchronisation gilt das auch für deine anderen Geräte.', 'replace', true),
+      el('div', null, el('button', { class: 'btn small', type: 'button', text: 'Abbrechen', onclick: function () { pendingImport = null; box.hidden = true; } })));
+    box.hidden = false;
+  }
+  function mergeInto(list, incoming, mode, stats) {
+    incoming.forEach(function (it) {
+      var ex = list.find(function (i) { return i.key === it.key; });
+      if (!ex) { list.push(it); stats.added += it.qty; return; }
+      if (mode !== 'add') { stats.skipped += it.qty; return; }
+      ex.qty += it.qty; stats.raised += it.qty;
+      if (it.price && (!ex.price || String(it.price.updated || '') > String(ex.price.updated || ''))) ex.price = it.price;
+      if (typeof ex.manual !== 'number' && typeof it.manual === 'number') ex.manual = it.manual;
+    });
+  }
+  function applyImport(mode) {
+    var imp = pendingImport;
+    if (!imp) return;
+    var snap = JSON.stringify(state), s = $('#collStatus');
+    var stats = { added: 0, raised: 0, skipped: 0 };
+    if (mode === 'replace') {
+      var ids = imp.collections.map(function (c) { return c.id; });
+      state = { collections: imp.collections, active: ids.indexOf(imp.active) >= 0 ? imp.active : ids[0], lang: state.lang, sort: state.sort, wish: imp.wish };
+    } else {
+      imp.collections.forEach(function (ic) {
+        var nm = ic.name.trim().toLowerCase();
+        var target = state.collections.find(function (c) { return c.id === ic.id; }) ||
+          state.collections.find(function (c) { return String(c.name).trim().toLowerCase() === nm; });
+        if (!target) {
+          target = { id: ic.id, name: ic.name, items: [] };
+          if (state.collections.some(function (c) { return c.id === target.id; })) target.id = uid();
+          state.collections.push(target);
+        }
+        if (!Array.isArray(target.items)) target.items = [];
+        mergeInto(target.items, ic.items, mode, stats);
+      });
+      if (!Array.isArray(state.wish)) state.wish = [];
+      mergeInto(state.wish, imp.wish, mode, stats);
+    }
+    pendingImport = null; $('#importBox').hidden = true;
+    save(); renderLangs(); renderCollection();
+    s.className = 'status';
+    s.textContent = mode === 'replace' ? 'Import abgeschlossen: Daten ersetzt.' :
+      'Import abgeschlossen: ' + stats.added + ' neue Karte(n), ' +
+      (mode === 'add' ? stats.raised + ' Stück aufaddiert.' : stats.skipped + ' Stück übersprungen.');
+    offerUndo('Import abgeschlossen', snap);
   }
 
   /* ---------- Sammlungsverwaltung ---------- */
@@ -1127,15 +1247,17 @@ a{color:var(--accent)}
       return;
     }
     clearTimeout(delTimer); delArmed = false; b.textContent = 'Löschen';
-    var id = active().id;
+    var id = active().id, delName = active().name, snap = JSON.stringify(state);
     state.collections = state.collections.filter(function (c) { return c.id !== id; });
     state.active = state.collections[0].id;
     save(); renderCollection();
+    offerUndo('Sammlung „' + delName + '“ gelöscht', snap);
   });
   $('#sortSel').addEventListener('change', function (e) { state.sort = e.target.value; save(); renderCollection(); });
   $('#refresh').addEventListener('click', refreshPrices);
   $('#exportJson').addEventListener('click', exportJson);
   $('#exportCsv').addEventListener('click', exportCsv);
+  $('#toastUndo').addEventListener('click', doUndo);
   $('#importFile').addEventListener('change', function (e) { if (e.target.files[0]) importJson(e.target.files[0]); e.target.value = ''; });
 
   function showView(v) {
@@ -1191,8 +1313,7 @@ a{color:var(--accent)}
     var img = $('#lbImg'), none = $('#lbNoImg');
     if (!imageBase) { img.removeAttribute('src'); img.hidden = true; none.hidden = false; return; }
     none.hidden = true; img.hidden = false;
-    var urls = [imageBase + '/high.webp', imageBase + '/low.webp'];
-    if (lang === 'de' && enVariant(imageBase) !== imageBase) urls.push(enVariant(imageBase) + '/high.webp', enVariant(imageBase) + '/low.webp');
+    var urls = imageUrls(imageBase, lang, ['high', 'low']);
     var k = 0;
     img.onerror = function () {
       k++;
@@ -1227,7 +1348,7 @@ a{color:var(--accent)}
     $('#lbPrev').disabled = i <= 0;
     $('#lbNext').disabled = i >= vSaved.length - 1;
     [i - 1, i + 1].forEach(function (j) {
-      if (j >= 0 && j < vSaved.length && vSaved[j].image) { var pre = new Image(); pre.src = vSaved[j].image + '/high.webp'; }
+      if (j >= 0 && j < vSaved.length && vSaved[j].image) { var pre = new Image(); pre.src = imageUrls(vSaved[j].image, vSaved[j].lang, ['high'])[0]; }
     });
   }
   function openSaved(items, i) {
@@ -1275,7 +1396,7 @@ a{color:var(--accent)}
     [i - 1, i + 1].forEach(function (j) {
       if (j < 0 || j >= results.length) return;
       getCard(lang, results[j].id).catch(function () {});
-      if (results[j].image) { var pre = new Image(); pre.src = results[j].image + '/high.webp'; }
+      if (results[j].image) { var pre = new Image(); pre.src = imageUrls(results[j].image, lang, ['high'])[0]; }
     });
   }
   function openViewer(i) {
@@ -1368,6 +1489,7 @@ a{color:var(--accent)}
   window.PokeApp = {
     getState: function () { return state; },
     applyState: function (next) {
+      ver++;
       var keepActive = state.active;
       next.lang = state.lang; next.sort = state.sort;
       if (!Array.isArray(next.collections) || !next.collections.length) {
