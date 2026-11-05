@@ -13,6 +13,7 @@
   var SDK = 'https://www.gstatic.com/firebasejs/10.12.2/';
   var META_KEY = 'pokesammlung.sync.v1';
   var WISH = '_wish';
+  var HIST = '_hist';
   var MAX_BYTES = 900000;
 
   var auth = null, db = null, user = null, unsubs = [], timer = null, flushing = false;
@@ -240,12 +241,14 @@
     var base = baseRef(u);
     Promise.all([
       base.collection('collections').get({ source: 'server' }),
-      base.collection('meta').doc('wish').get({ source: 'server' })
+      base.collection('meta').doc('wish').get({ source: 'server' }),
+      base.collection('meta').doc('history').get({ source: 'server' })
     ]).then(function (r) {
       if (user !== u) return;
-      var cloud = { cols: [], wish: null };
+      var cloud = { cols: [], wish: null, hist: null };
       r[0].forEach(function (d) { cloud.cols.push({ id: d.id, data: d.data() || {} }); });
       if (r[1].exists) cloud.wish = r[1].data();
+      if (r[2].exists) cloud.hist = r[2].data();
       var cHas = cloudHas(cloud), lHas = localHas();
       if (cHas && lHas) {
         ui.cloud = cloud; ui.phase = 'deciding'; ui.msg = ''; render();
@@ -275,6 +278,18 @@
     return out;
   }
 
+  /* Wertverlauf: je Tag zählt der spätere Messpunkt, beide Seiten werden vereinigt. */
+  function mergeHist(a, b) {
+    var map = {};
+    (a || []).concat(b || []).forEach(function (e) {
+      if (!e || !e.d) return;
+      var x = map[e.d];
+      if (!x || (e.t || 0) > (x.t || 0)) map[e.d] = e;
+    });
+    return Object.keys(map).sort().map(function (k) { return map[k]; });
+  }
+  function cloudHist(cloud) { return cloud.hist && !cloud.hist.deleted ? (cloud.hist.items || []) : []; }
+
   function apply(kind, cloud) {
     var u = user; if (!u) return;
     var st = clone(App.getState()), t = Date.now();
@@ -285,12 +300,15 @@
       st.collections = live.map(function (c) { return { id: c.id, name: c.data.name || 'Sammlung', items: c.data.items || [] }; })
         .sort(function (a, b) { return a.name.localeCompare(b.name, 'de'); });
       st.wish = cloud.wish && !cloud.wish.deleted ? (cloud.wish.items || []) : [];
+      st.history = cloudHist(cloud);
       cloud.cols.forEach(function (c) { meta.upd[c.id] = Number(c.data.updatedAt) || 0; });
       if (cloud.wish) meta.upd[WISH] = Number(cloud.wish.updatedAt) || 0;
+      if (cloud.hist) meta.upd[HIST] = Number(cloud.hist.updatedAt) || 0;
       App.applyState(st);
       /* gespeicherte Signaturen des übernommenen Stands */
       App.getState().collections.forEach(function (c) { meta.sig[c.id] = sig({ name: c.name, items: c.items || [] }); });
       meta.sig[WISH] = sig({ items: App.getState().wish || [] });
+      meta.sig[HIST] = sig({ items: App.getState().history || [] });
     } else {
       if (kind === 'merge') {
         live.forEach(function (c) {
@@ -299,6 +317,7 @@
           else st.collections.push({ id: c.id, name: c.data.name || 'Sammlung', items: c.data.items || [] });
         });
         if (cloud.wish && !cloud.wish.deleted) st.wish = mergeItems(st.wish || [], cloud.wish.items || []);
+        st.history = mergeHist(st.history || [], cloudHist(cloud));
         App.applyState(st);
       } else if (kind === 'upload') {
         var keep = {};
@@ -311,6 +330,7 @@
         meta.sig[c.id] = sig({ name: c.name, items: c.items || [] }); meta.upd[c.id] = t; meta.dirty[c.id] = true;
       });
       meta.sig[WISH] = sig({ items: cur.wish || [] }); meta.upd[WISH] = t; meta.dirty[WISH] = true;
+      meta.sig[HIST] = sig({ items: cur.history || [] }); meta.upd[HIST] = t; meta.dirty[HIST] = true;
     }
     meta.uid = u.uid; saveMeta();
     ui.cloud = null; ui.phase = 'in';
@@ -324,6 +344,7 @@
     var st = App.getState(), d = {};
     st.collections.forEach(function (c) { d[c.id] = { name: c.name, items: c.items || [] }; });
     d[WISH] = { items: st.wish || [] };
+    d[HIST] = { items: st.history || [] };
     return d;
   }
   function changed() {
@@ -331,6 +352,7 @@
     var docs = localDocs(), t = Date.now(), any = false;
     Object.keys(docs).forEach(function (id) {
       var s = sig(docs[id]);
+      if (id === HIST && meta.sig[id] === undefined && !(docs[id].items || []).length) { meta.sig[id] = s; return; }
       if (meta.sig[id] !== s) { meta.sig[id] = s; meta.upd[id] = t; meta.dirty[id] = true; delete meta.del[id]; any = true; }
     });
     Object.keys(meta.sig).forEach(function (id) {
@@ -341,7 +363,9 @@
   function schedule() { clearTimeout(timer); timer = setTimeout(flush, 1200); }
   function refOf(id) {
     var base = baseRef(user);
-    return id === WISH ? base.collection('meta').doc('wish') : base.collection('collections').doc(id);
+    if (id === WISH) return base.collection('meta').doc('wish');
+    if (id === HIST) return base.collection('meta').doc('history');
+    return base.collection('collections').doc(id);
   }
   function flush() {
     if (!user || !db || meta.uid !== user.uid || flushing) return Promise.resolve();
@@ -378,6 +402,13 @@
       var id = e.id, d = e.data || {}, upd = Number(d.updatedAt) || 0;
       if (upd <= (meta.upd[id] || 0)) return;
       meta.upd[id] = upd; delete meta.dirty[id]; delete meta.del[id];
+      if (id === HIST) {
+        /* vereinigen statt ersetzen; die Signatur bleibt die der Cloud, damit ein Unterschied wieder hochgeladen wird */
+        var remote = d.deleted ? [] : (d.items || []);
+        st.history = mergeHist(st.history || [], remote);
+        meta.sig[id] = sig({ items: remote });
+        any = true; return;
+      }
       if (id === WISH) {
         st.wish = d.deleted ? [] : (d.items || []);
         meta.sig[id] = sig({ items: st.wish });
@@ -413,6 +444,9 @@
     unsubs.push(base.collection('meta').doc('wish').onSnapshot(function (s) {
       if (s.exists) applyRemote([{ id: WISH, data: s.data() }]);
     }, onErr));
+    unsubs.push(base.collection('meta').doc('history').onSnapshot(function (s) {
+      if (s.exists) applyRemote([{ id: HIST, data: s.data() }]);
+    }, onErr));
   }
   function unlisten() { unsubs.forEach(function (f) { try { f(); } catch (e) {} }); unsubs = []; }
 
@@ -423,11 +457,13 @@
     changed();
     Promise.all([
       base.collection('collections').get({ source: 'server' }),
-      base.collection('meta').doc('wish').get({ source: 'server' })
+      base.collection('meta').doc('wish').get({ source: 'server' }),
+      base.collection('meta').doc('history').get({ source: 'server' })
     ]).then(function (r) {
       var es = [];
       r[0].forEach(function (d) { es.push({ id: d.id, data: d.data() }); });
       if (r[1].exists) es.push({ id: WISH, data: r[1].data() });
+      if (r[2].exists) es.push({ id: HIST, data: r[2].data() });
       applyRemote(es);
       return flush();
     }).then(function () { ui.last = new Date(); setStatus('Abgleich abgeschlossen.', false); },

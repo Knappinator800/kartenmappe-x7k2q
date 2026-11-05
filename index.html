@@ -129,6 +129,16 @@ a{color:var(--accent)}
 .importbox{margin-top:10px;display:flex;flex-direction:column;gap:10px}
 .importbox[hidden]{display:none}
 .stale{color:var(--warn)}
+.chart{margin:10px 0 12px;display:flex;flex-direction:column;gap:6px}
+.ranges{display:flex;gap:4px;flex-wrap:wrap}
+.ranges button{padding:5px 10px;font-size:.85rem;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+.ranges button[aria-pressed=true]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.chdelta{font-weight:600;font-variant-numeric:tabular-nums;min-height:1.3em}
+.chdelta.up{color:var(--ok)}
+.chdelta.down{color:var(--danger)}
+#chSvg svg{width:100%;height:auto;display:block;touch-action:pan-y;overflow:visible}
+.chcheck{display:flex;gap:6px;align-items:center}
+.chcheck input{width:auto}
 .importbox .opt{display:flex;flex-direction:column;gap:3px}
 .importbox .opt .btn{align-self:flex-start;white-space:normal;text-align:left}
 .syncbox{margin-bottom:12px}
@@ -200,6 +210,18 @@ a{color:var(--accent)}
         </div>
         <div id="ovStamp" class="meta"></div>
         <div id="ovStatus" class="status" role="status" aria-live="polite"></div>
+        <div class="chart" id="chartBox">
+          <h3 class="kindtitle" style="margin:8px 0 0">Wertverlauf</h3>
+          <div class="row">
+            <select id="chScope" class="grow" aria-label="Verlauf für"></select>
+            <div id="chRanges" class="ranges" role="group" aria-label="Zeitraum"></div>
+          </div>
+          <div id="chDelta" class="chdelta"></div>
+          <div id="chTip" class="meta"></div>
+          <div id="chSvg"></div>
+          <label class="meta chcheck"><input type="checkbox" id="chCount" checked> Kartenanzahl anzeigen (gestrichelt)</label>
+          <div class="meta">Der Verlauf zeigt auch Karten, die du hinzugefügt oder entfernt hast. Ein neuer Messpunkt entsteht jedes Mal, wenn du Preise aktualisierst.</div>
+        </div>
         <div id="ovList" class="ovlist"></div>
       </div>
       <div class="panel">
@@ -308,10 +330,13 @@ a{color:var(--accent)}
   function load() {
     try {
       var s = JSON.parse(localStorage.getItem(KEY));
-      if (s && Array.isArray(s.collections) && s.collections.length) return migrateWish(s);
+      if (s && Array.isArray(s.collections) && s.collections.length) {
+        if (!Array.isArray(s.history)) s.history = [];
+        return migrateWish(s);
+      }
     } catch (e) {}
     var id = uid();
-    return { collections: [{ id: id, name: 'Meine Sammlung', items: [] }], active: id, lang: 'de', wish: [] };
+    return { collections: [{ id: id, name: 'Meine Sammlung', items: [] }], active: id, lang: 'de', wish: [], history: [] };
   }
   /* Die Wunschliste ist unabhängig von den Sammlungen. Ältere Daten (Wunschliste je Sammlung) werden zusammengeführt. */
   function migrateWish(st) {
@@ -982,6 +1007,8 @@ a{color:var(--accent)}
     $('#ovCards').textContent = String(tot.cards);
     $('#ovCount').textContent = String(state.collections.length);
     $('#ovStamp').textContent = stampText();
+    if (!(state.history || []).length && recordSnapshot()) save();
+    renderChart();
     $('#ovMissing').textContent = tot.missing ? tot.missing + ' Karte(n) ohne Preis sind nicht enthalten' : '';
   }
   function renderCollection() {
@@ -1153,6 +1180,7 @@ a{color:var(--accent)}
       };
     }), 6).then(function () {
       setRefreshing(false);
+      recordSnapshot();
       save(); renderCollection();
       statusEl.className = 'status' + (failed ? ' err' : '');
       statusEl.textContent = 'Fertig: ' + ok + ' aktualisiert' +
@@ -1162,6 +1190,195 @@ a{color:var(--accent)}
   }
   function refreshPrices() { refreshItems(listOf(active()).slice(), $('#collStatus')); }
   function refreshAll() { refreshItems(allItems(), $('#ovStatus')); }
+
+  /* ---------- Wertverlauf ---------- */
+  var HIST_MAX = 1500, DAY = 86400000;
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+  function dayStr(ts) { var d = new Date(ts); return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+  function r2(x) { return Math.round(x * 100) / 100; }
+  /* Aktueller Gesamtstand: je Sammlung [Wert, Karten]. Die Wunschliste zählt nicht mit. */
+  function snapshotNow() {
+    var c = {}, v = 0, n = 0, t = Date.now();
+    state.collections.forEach(function (col) {
+      var r = summarize(listOf(col, 'items'));
+      c[col.id] = [r2(r.sum), r.cards]; v += r.sum; n += r.cards;
+    });
+    return { d: dayStr(t), t: t, v: r2(v), n: n, c: c };
+  }
+  /* Pro Tag zählt der letzte Messpunkt. */
+  function mergeHist(a, b) {
+    var map = {};
+    (a || []).concat(b || []).forEach(function (e) {
+      if (!e || !e.d) return;
+      var x = map[e.d];
+      if (!x || (e.t || 0) > (x.t || 0)) map[e.d] = e;
+    });
+    return Object.keys(map).sort().map(function (k) { return map[k]; });
+  }
+  /* Ältere Daten (über 2 Jahre) werden auf einen Wert pro Woche verdichtet, insgesamt höchstens HIST_MAX Einträge. */
+  function compactHist(list) {
+    var cut = Date.now() - 730 * DAY, seen = {}, out = [];
+    for (var i = list.length - 1; i >= 0; i--) {
+      var e = list[i], t = Date.parse(e.d + 'T12:00:00');
+      if (t < cut) { var wk = Math.floor(t / (7 * DAY)); if (seen[wk]) continue; seen[wk] = 1; }
+      out.push(e);
+    }
+    out.reverse();
+    return out.length > HIST_MAX ? out.slice(out.length - HIST_MAX) : out;
+  }
+  function recordSnapshot() {
+    var e = snapshotNow();
+    if (!e.n && !e.v) return false;
+    state.history = compactHist(mergeHist(state.history || [], [e]));
+    return true;
+  }
+  function cleanHistory(list) {
+    return (Array.isArray(list) ? list : []).filter(function (e) {
+      return e && /^\d{4}-\d{2}-\d{2}$/.test(String(e.d)) && isFinite(e.v) && isFinite(e.n);
+    }).map(function (e) {
+      return { d: e.d, t: Number(e.t) || Date.parse(e.d + 'T12:00:00'), v: Number(e.v), n: Number(e.n), c: e.c && typeof e.c === 'object' ? e.c : {} };
+    });
+  }
+
+  var RANGES = [['1m', '1 Monat', 30], ['3m', '3 Monate', 90], ['1y', '1 Jahr', 365], ['all', 'Alles', null]];
+  var CH_KEY = 'pokesammlung.chart';
+  var chart = { scope: 'all', range: '3m', count: true };
+  try {
+    var chs = JSON.parse(localStorage.getItem(CH_KEY));
+    if (chs && typeof chs === 'object') {
+      if (typeof chs.scope === 'string') chart.scope = chs.scope;
+      if (RANGES.some(function (r) { return r[0] === chs.range; })) chart.range = chs.range;
+      if (typeof chs.count === 'boolean') chart.count = chs.count;
+    }
+  } catch (e) {}
+  function saveChart() { try { localStorage.setItem(CH_KEY, JSON.stringify(chart)); } catch (e) {} }
+  function seriesFor(scope) {
+    var pts = (state.history || []).slice(), live = snapshotNow(), out = [];
+    if (pts.length && pts[pts.length - 1].d === live.d) pts.pop();
+    pts.push(live);
+    pts.forEach(function (p) {
+      if (scope === 'all') out.push({ t: p.t, v: p.v, n: p.n });
+      else if (p.c && p.c[scope]) out.push({ t: p.t, v: p.c[scope][0], n: p.c[scope][1] });
+    });
+    return out;
+  }
+  /* Der letzte Punkt vor dem Zeitraum dient als Ausgangswert für die Veränderung. */
+  function rangeSlice(series, days) {
+    if (!days) return series;
+    var cutoff = Date.now() - days * DAY, first = -1;
+    for (var i = 0; i < series.length; i++) { if (series[i].t >= cutoff) { first = i; break; } }
+    if (first < 0) return series.slice(series.length - 1);
+    return series.slice(Math.max(0, first - 1));
+  }
+  function fmtDate(t) { return new Date(t).toLocaleDateString('de-DE'); }
+  function svgEl(tag, attrs) {
+    var e = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    Object.keys(attrs || {}).forEach(function (k) { e.setAttribute(k, attrs[k]); });
+    return e;
+  }
+  function tipText(p, last) {
+    return (last ? 'Aktuell' : fmtDate(p.t)) + ' · ' + money(p.v) + ' · ' + p.n + (p.n === 1 ? ' Karte' : ' Karten');
+  }
+  function drawChart(series) {
+    var W = 640, H = 250, L = 84, R = chart.count ? 50 : 14, T = 14, B = 32, iw = W - L - R, ih = H - T - B;
+    var t0 = series[0].t, t1 = series[series.length - 1].t, dt = (t1 - t0) || 1;
+    function range(key) {
+      var lo = Infinity, hi = -Infinity;
+      series.forEach(function (p) { if (p[key] < lo) lo = p[key]; if (p[key] > hi) hi = p[key]; });
+      if (lo === hi) { lo -= 1; hi += 1; }
+      var pad = (hi - lo) * 0.08;
+      return [lo >= 0 && lo - pad < 0 ? 0 : lo - pad, hi + pad];
+    }
+    var vr = range('v'), nr = range('n');
+    function X(t) { return L + (t - t0) / dt * iw; }
+    function Yv(v) { return T + (1 - (v - vr[0]) / (vr[1] - vr[0])) * ih; }
+    function Yn(n) { return T + (1 - (n - nr[0]) / (nr[1] - nr[0])) * ih; }
+    var span = vr[1] - vr[0];
+    var axis = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: span >= 20 ? 0 : 2 });
+    var svg = svgEl('svg', { viewBox: '0 0 ' + W + ' ' + H, role: 'img', 'aria-label': 'Wertverlauf der Sammlung' });
+    [0, 0.5, 1].forEach(function (k) {
+      var y = T + ih * (1 - k), val = vr[0] + (vr[1] - vr[0]) * k;
+      svg.append(svgEl('line', { x1: L, x2: W - R, y1: y, y2: y, stroke: 'var(--line)', 'stroke-width': 1 }));
+      var tx = svgEl('text', { x: L - 6, y: y + 4, 'text-anchor': 'end', 'font-size': 16, fill: 'var(--muted)' });
+      tx.textContent = axis.format(val); svg.append(tx);
+    });
+    var d1 = svgEl('text', { x: L, y: H - 8, 'text-anchor': 'start', 'font-size': 16, fill: 'var(--muted)' }); d1.textContent = fmtDate(t0);
+    var d2 = svgEl('text', { x: W - R, y: H - 8, 'text-anchor': 'end', 'font-size': 16, fill: 'var(--muted)' }); d2.textContent = fmtDate(t1);
+    svg.append(d1, d2);
+    var line = series.map(function (p, i) { return (i ? 'L' : 'M') + X(p.t).toFixed(1) + ' ' + Yv(p.v).toFixed(1); }).join(' ');
+    svg.append(svgEl('path', { d: line + ' L' + X(t1).toFixed(1) + ' ' + (T + ih) + ' L' + X(t0).toFixed(1) + ' ' + (T + ih) + ' Z', fill: 'var(--accent)', opacity: 0.12 }));
+    if (chart.count) {
+      svg.append(svgEl('path', { d: series.map(function (p, i) { return (i ? 'L' : 'M') + X(p.t).toFixed(1) + ' ' + Yn(p.n).toFixed(1); }).join(' '),
+        fill: 'none', stroke: 'var(--muted)', 'stroke-width': 1.5, 'stroke-dasharray': '5 4' }));
+      [[nr[0], 'end'], [nr[1], 'start']].forEach(function (a, idx) {
+        var tx = svgEl('text', { x: W - R + 6, y: (idx ? T + 12 : T + ih), 'font-size': 16, fill: 'var(--muted)' });
+        tx.textContent = String(Math.round(a[0])); svg.append(tx);
+      });
+    }
+    svg.append(svgEl('path', { d: line, fill: 'none', stroke: 'var(--accent)', 'stroke-width': 2.5, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
+    if (series.length <= 40) series.forEach(function (p) { svg.append(svgEl('circle', { cx: X(p.t), cy: Yv(p.v), r: 3, fill: 'var(--accent)' })); });
+    var mark = svgEl('g', { visibility: 'hidden' });
+    var mline = svgEl('line', { y1: T, y2: T + ih, stroke: 'var(--muted)', 'stroke-width': 1 });
+    var mdot = svgEl('circle', { r: 5, fill: 'var(--surface)', stroke: 'var(--accent)', 'stroke-width': 2.5 });
+    mark.append(mline, mdot); svg.append(mark);
+    var hit = svgEl('rect', { x: L, y: T, width: iw, height: ih, fill: 'transparent' });
+    svg.append(hit);
+    function nearest(ev) {
+      var r = svg.getBoundingClientRect();
+      var x = (ev.clientX - r.left) / r.width * W, best = 0, bd = Infinity;
+      series.forEach(function (p, i) { var dd = Math.abs(X(p.t) - x); if (dd < bd) { bd = dd; best = i; } });
+      return best;
+    }
+    function show(i) {
+      var p = series[i];
+      mline.setAttribute('x1', X(p.t)); mline.setAttribute('x2', X(p.t));
+      mdot.setAttribute('cx', X(p.t)); mdot.setAttribute('cy', Yv(p.v));
+      mark.setAttribute('visibility', 'visible');
+      $('#chTip').textContent = tipText(p, i === series.length - 1);
+    }
+    hit.addEventListener('pointerdown', function (ev) { show(nearest(ev)); });
+    hit.addEventListener('pointermove', function (ev) { if (ev.pointerType === 'mouse' || ev.buttons) show(nearest(ev)); });
+    hit.addEventListener('pointerleave', function (ev) {
+      if (ev.pointerType !== 'mouse') return;
+      mark.setAttribute('visibility', 'hidden'); $('#chTip').textContent = tipText(series[series.length - 1], true);
+    });
+    $('#chSvg').replaceChildren(svg);
+  }
+  function renderChart() {
+    var sel = $('#chScope');
+    if (chart.scope !== 'all' && !collById(chart.scope)) chart.scope = 'all';
+    sel.replaceChildren(el('option', { value: 'all', text: 'Alle Sammlungen' }));
+    state.collections.forEach(function (c) { sel.append(el('option', { value: c.id, text: c.name })); });
+    sel.value = chart.scope;
+    var rb = $('#chRanges');
+    rb.replaceChildren();
+    RANGES.forEach(function (r) {
+      rb.append(el('button', { type: 'button', 'aria-pressed': String(chart.range === r[0]), text: r[1],
+        onclick: function () { chart.range = r[0]; saveChart(); renderChart(); } }));
+    });
+    $('#chCount').checked = chart.count;
+    var all = seriesFor(chart.scope);
+    var days = RANGES.filter(function (r) { return r[0] === chart.range; })[0][2];
+    var series = rangeSlice(all, days);
+    var delta = $('#chDelta');
+    delta.className = 'chdelta';
+    var last = all[all.length - 1];
+    if (!last) { delta.textContent = ''; $('#chTip').textContent = ''; $('#chSvg').replaceChildren(); return; }
+    if (series.length < 2) {
+      delta.textContent = '';
+      $('#chTip').textContent = tipText(last, true);
+      $('#chSvg').replaceChildren(el('div', { class: 'meta', text: all.length < 2
+        ? 'Der Verlauf entsteht, wenn du die Preise an mehreren Tagen aktualisierst. Bisher gibt es einen Messpunkt.'
+        : 'Im gewählten Zeitraum gibt es nur einen Messpunkt. Wähle einen längeren Zeitraum.' }));
+      return;
+    }
+    var diff = r2(series[series.length - 1].v - series[0].v), base = series[0].v;
+    var pct = base > 0 ? (diff >= 0 ? '+' : '−') + new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 }).format(Math.abs(diff / base * 100)) + ' %' : null;
+    delta.textContent = (diff === 0 ? 'Unverändert' : (diff > 0 ? '+' : '−') + money(Math.abs(diff)) + (pct ? ' (' + pct + ')' : '')) + ' seit ' + fmtDate(series[0].t);
+    if (diff > 0) delta.className = 'chdelta up'; else if (diff < 0) delta.className = 'chdelta down';
+    $('#chTip').textContent = tipText(series[series.length - 1], true);
+    drawChart(series);
+  }
 
   /* ---------- Export / Import ---------- */
   function download(name, text, type) {
@@ -1205,6 +1422,7 @@ a{color:var(--accent)}
           c.items = cleanItems(c.items);
         });
         imp.wish = cleanItems(imp.wish);
+        imp.history = cleanHistory(data.history);
         imp.active = data.active;
         pendingImport = imp;
         s.className = 'status'; s.textContent = '';
@@ -1252,7 +1470,7 @@ a{color:var(--accent)}
     var stats = { added: 0, raised: 0, skipped: 0 };
     if (mode === 'replace') {
       var ids = imp.collections.map(function (c) { return c.id; });
-      state = { collections: imp.collections, active: ids.indexOf(imp.active) >= 0 ? imp.active : ids[0], lang: state.lang, sort: state.sort, wish: imp.wish };
+      state = { collections: imp.collections, active: ids.indexOf(imp.active) >= 0 ? imp.active : ids[0], lang: state.lang, sort: state.sort, wish: imp.wish, history: imp.history };
     } else {
       imp.collections.forEach(function (ic) {
         var nm = ic.name.trim().toLowerCase();
@@ -1268,6 +1486,7 @@ a{color:var(--accent)}
       });
       if (!Array.isArray(state.wish)) state.wish = [];
       mergeInto(state.wish, imp.wish, mode, stats);
+      state.history = compactHist(mergeHist(state.history || [], imp.history));
     }
     pendingImport = null; $('#importBox').hidden = true;
     save(); renderLangs(); renderCollection();
@@ -1327,6 +1546,8 @@ a{color:var(--accent)}
   $('#sortSel').addEventListener('change', function (e) { state.sort = e.target.value; save(); renderCollection(); });
   $('#refresh').addEventListener('click', refreshPrices);
   $('#refreshAll').addEventListener('click', refreshAll);
+  $('#chScope').addEventListener('change', function (e) { chart.scope = e.target.value; saveChart(); renderChart(); });
+  $('#chCount').addEventListener('change', function (e) { chart.count = e.target.checked; saveChart(); renderChart(); });
   $('#exportJson').addEventListener('click', exportJson);
   $('#exportCsv').addEventListener('click', exportCsv);
   $('#toastUndo').addEventListener('click', doUndo);
@@ -1570,6 +1791,7 @@ a{color:var(--accent)}
       next.collections.forEach(function (c) { if (!Array.isArray(c.items)) c.items = []; });
       next.active = next.collections.some(function (c) { return c.id === keepActive; }) ? keepActive : next.collections[0].id;
       next.wish = Array.isArray(next.wish) ? next.wish : [];
+      next.history = Array.isArray(next.history) ? next.history : [];
       state = next;
       try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
       renderCollection();
