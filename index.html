@@ -128,6 +128,7 @@ a{color:var(--accent)}
 .toast button{background:none;border:0;color:inherit;font-weight:700;text-decoration:underline;padding:4px 2px;white-space:nowrap}
 .importbox{margin-top:10px;display:flex;flex-direction:column;gap:10px}
 .importbox[hidden]{display:none}
+.stale{color:var(--warn)}
 .importbox .opt{display:flex;flex-direction:column;gap:3px}
 .importbox .opt .btn{align-self:flex-start;white-space:normal;text-align:left}
 .syncbox{margin-bottom:12px}
@@ -194,6 +195,11 @@ a{color:var(--accent)}
           <div><div class="meta">Sammlungen</div><div class="price" id="ovCount">0</div></div>
           <div><div class="meta" id="ovMissing"></div></div>
         </div>
+        <div class="row" style="margin:4px 0 6px">
+          <button class="btn primary small" id="refreshAll" type="button">Alle Preise aktualisieren</button>
+        </div>
+        <div id="ovStamp" class="meta"></div>
+        <div id="ovStatus" class="status" role="status" aria-live="polite"></div>
         <div id="ovList" class="ovlist"></div>
       </div>
       <div class="panel">
@@ -975,6 +981,7 @@ a{color:var(--accent)}
     $('#ovTotal').textContent = money(tot.sum);
     $('#ovCards').textContent = String(tot.cards);
     $('#ovCount').textContent = String(state.collections.length);
+    $('#ovStamp').textContent = stampText();
     $('#ovMissing').textContent = tot.missing ? tot.missing + ' Karte(n) ohne Preis sind nicht enthalten' : '';
   }
   function renderCollection() {
@@ -1000,6 +1007,7 @@ a{color:var(--accent)}
       else priceTxt.append(el('span', { class: 'price none', text: 'Kein Preis, bitte eigenen eintragen' }));
       if (!up || !up.manual) {
         if (item.price && item.price.updated) priceTxt.append(' · Stand ' + String(item.price.updated).slice(0, 10));
+        if (up && isStale(item)) priceTxt.append(el('span', { class: 'stale', text: ' · Preis älter als 30 Tage' }));
       }
 
       var manual = el('input', {
@@ -1064,33 +1072,96 @@ a{color:var(--accent)}
   }
 
   /* ---------- Preise aktualisieren ---------- */
-  function refreshPrices() {
-    var col = active();
-    var items = listOf(col).slice();
-    if (!items.length) return;
-    var done = 0, failed = 0;
-    var s = $('#collStatus');
-    s.className = 'status';
-    s.textContent = 'Aktualisiere 0 von ' + items.length + ' …';
-    $('#refresh').disabled = true;
-    pool(items.map(function (item) {
+  var STALE_MS = 30 * 24 * 3600 * 1000;
+  var refreshing = false;
+  function allItems() {
+    var out = [];
+    state.collections.forEach(function (c) { (c.items || []).forEach(function (i) { out.push(i); }); });
+    (state.wish || []).forEach(function (i) { out.push(i); });
+    return out;
+  }
+  /* Zeitpunkt des Preises: Abruf in dieser App, sonst das Datum aus den TCGdex-Daten */
+  function priceTime(item) {
+    if (typeof item.priceAt === 'number') return item.priceAt;
+    var t = item.price && Date.parse(item.price.updated);
+    return isFinite(t) ? t : 0;
+  }
+  function isStale(item) {
+    if (typeof item.manual === 'number' || !item.price) return false;
+    var t = priceTime(item);
+    return t > 0 && Date.now() - t > STALE_MS;
+  }
+  function fmtWhen(t) {
+    var d = new Date(t), n = new Date();
+    var time = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    function day0(x) { return new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime(); }
+    var diff = Math.round((day0(n) - day0(d)) / 86400000);
+    if (diff === 0) return 'heute, ' + time;
+    if (diff === 1) return 'gestern, ' + time;
+    return d.toLocaleDateString('de-DE') + ', ' + time;
+  }
+  function stampText() {
+    var last = 0, stale = 0;
+    allItems().forEach(function (i) {
+      if (typeof i.priceAt === 'number' && i.priceAt > last) last = i.priceAt;
+      if (isStale(i)) stale++;
+    });
+    var txt = last ? 'Zuletzt aktualisiert: ' + fmtWhen(last) : 'Noch nicht aktualisiert';
+    if (stale) txt += ' · ' + stale + (stale === 1 ? ' Preis' : ' Preise') + ' älter als 30 Tage';
+    return txt;
+  }
+  /* Neuen Preis übernehmen. Liefert der Abruf keinen Preis, bleibt ein vorhandener alter Preis stehen. */
+  function applyFresh(item, card) {
+    item.rev = hasReverse(card);
+    item.base = baseLabel(card);
+    var p = priceFrom(card, variantOf(item));
+    if (!p) return false;
+    item.price = p;
+    item.priceAt = Date.now();
+    return true;
+  }
+  function setRefreshing(on) {
+    refreshing = on;
+    $('#refresh').disabled = on;
+    $('#refreshAll').disabled = on;
+  }
+  /* Jede Karte wird nur einmal abgefragt, auch wenn sie mehrfach vorkommt (andere Sammlung, andere Variante). */
+  function refreshItems(items, statusEl) {
+    if (refreshing || !items.length) return;
+    var groups = {}, order = [];
+    items.forEach(function (i) {
+      var k = i.lang + ':' + i.id;
+      if (!groups[k]) { groups[k] = []; order.push(k); }
+      groups[k].push(i);
+    });
+    var total = order.length, done = 0, ok = 0, nonew = 0, failed = 0;
+    setRefreshing(true);
+    statusEl.className = 'status';
+    statusEl.textContent = 'Aktualisiere 0 von ' + total + ' Karten …';
+    pool(order.map(function (k) {
       return function () {
-        return getCard(item.lang, item.id, true).then(function (card) {
-          item.price = priceFrom(card, variantOf(item));
-          item.rev = hasReverse(card);
-          item.base = baseLabel(card);
+        var g = groups[k];
+        return getCard(g[0].lang, g[0].id, true).then(function (card) {
+          var got = false;
+          g.forEach(function (it) { if (applyFresh(it, card)) got = true; });
+          if (got) ok++; else nonew++;
         }).catch(function () { failed++; }).then(function () {
           done++;
-          s.textContent = 'Aktualisiere ' + done + ' von ' + items.length + ' …';
+          statusEl.textContent = 'Aktualisiere ' + done + ' von ' + total + ' Karten …';
+          if (done % 50 === 0) save();
         });
       };
     }), 6).then(function () {
+      setRefreshing(false);
       save(); renderCollection();
-      $('#refresh').disabled = false;
-      s.className = 'status' + (failed ? ' err' : '');
-      s.textContent = failed ? (failed + ' Karte(n) konnten nicht aktualisiert werden.') : 'Preise sind aktuell.';
+      statusEl.className = 'status' + (failed ? ' err' : '');
+      statusEl.textContent = 'Fertig: ' + ok + ' aktualisiert' +
+        (nonew ? ', ' + nonew + ' ohne neuen Preis (alter Preis bleibt)' : '') +
+        (failed ? ', ' + failed + ' nicht erreichbar' : '') + '.';
     });
   }
+  function refreshPrices() { refreshItems(listOf(active()).slice(), $('#collStatus')); }
+  function refreshAll() { refreshItems(allItems(), $('#ovStatus')); }
 
   /* ---------- Export / Import ---------- */
   function download(name, text, type) {
@@ -1255,6 +1326,7 @@ a{color:var(--accent)}
   });
   $('#sortSel').addEventListener('change', function (e) { state.sort = e.target.value; save(); renderCollection(); });
   $('#refresh').addEventListener('click', refreshPrices);
+  $('#refreshAll').addEventListener('click', refreshAll);
   $('#exportJson').addEventListener('click', exportJson);
   $('#exportCsv').addEventListener('click', exportCsv);
   $('#toastUndo').addEventListener('click', doUndo);
