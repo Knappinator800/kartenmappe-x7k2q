@@ -158,6 +158,8 @@ a{color:var(--accent)}
 .switch::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--surface);transition:transform .15s}
 .switch:checked{background:var(--accent)}
 .switch:checked::after{transform:translateX(14px)}
+.offbox{margin-top:10px;display:flex;flex-direction:column;gap:6px}
+.offbox[hidden]{display:none}
 .own{color:var(--ok);font-weight:600;font-size:.8rem;overflow-wrap:anywhere}
 .own:empty{display:none}
 </style>
@@ -271,12 +273,19 @@ a{color:var(--accent)}
         </div>
         <div id="collStatus" class="status" role="status" aria-live="polite"></div>
         <div id="importBox" class="importbox" hidden></div>
+        <div id="offBox" class="offbox" hidden>
+          <div class="row">
+            <button class="btn primary small" id="offBtn" type="button">Bilder offline speichern</button>
+            <button class="btn small" id="offClear" type="button">Bilder-Speicher leeren</button>
+          </div>
+          <div id="offStat" class="meta" role="status" aria-live="polite"></div>
+        </div>
       </div>
       <div id="list" class="list"></div>
     </section>
   </main>
 
-  <p class="note">Preise stammen aus den Cardmarket-Daten der TCGdex-API (Trend, sonst Durchschnitt). Für Karten ohne Preis, etwa viele koreanische und chinesische, trägst du einen eigenen Preis ein. Die eBay-Links öffnen die Suche nach verkauften Artikeln, eBay-Preise werden nicht automatisch übernommen. Tippe in den Suchergebnissen auf eine Karte, um sie zu vergrößern, und blättere mit den Pfeilen oder per Wischen weiter. Die Wunschliste ist unabhängig von deinen Sammlungen. Deine Daten liegen auf diesem Gerät. Mit einem Konto unter „Synchronisation“ werden sie auf deine anderen Geräte übertragen. Zusätzlich kannst du sie über Export JSON sichern.</p>
+  <p class="note">Preise stammen aus den Cardmarket-Daten der TCGdex-API (Trend, sonst Durchschnitt). Für Karten ohne Preis, etwa viele koreanische und chinesische, trägst du einen eigenen Preis ein. Die eBay-Links öffnen die Suche nach verkauften Artikeln, eBay-Preise werden nicht automatisch übernommen. Tippe in den Suchergebnissen auf eine Karte, um sie zu vergrößern, und blättere mit den Pfeilen oder per Wischen weiter. Die Wunschliste ist unabhängig von deinen Sammlungen; ihre Bilder kannst du dort für die Nutzung ohne Netz speichern. Deine Daten liegen auf diesem Gerät. Mit einem Konto unter „Synchronisation“ werden sie auf deine anderen Geräte übertragen. Zusätzlich kannst du sie über Export JSON sichern.</p>
 </div>
 
 <div id="toast" class="toast" role="status" aria-live="polite" hidden>
@@ -465,6 +474,124 @@ a{color:var(--accent)}
     var ws = [];
     for (var n = 0; n < limit; n++) ws.push(worker());
     return Promise.all(ws);
+  }
+
+  /* ---------- Wunschliste offline ---------- */
+  /* Nur die Bilder der Wunschliste werden auf Knopfdruck im Gerätespeicher abgelegt (klein und groß).
+     Der Service Worker (sw.js) liefert sie aus, wenn das Netz fehlt. */
+  var IMG_CACHE = 'pokesammlung-img';
+  var offBusy = false, offCancel = false, offToken = 0, offNote = '';
+  function offSupported() { try { return typeof caches !== 'undefined' && !!caches.open; } catch (e) { return false; } }
+  /* je Karte: für klein und groß die möglichen Adressen (deutsch zuerst, dann englisch) */
+  function wishImageJobs() {
+    var jobs = [], seen = {};
+    (state.wish || []).forEach(function (it) {
+      if (!it.image) return;
+      var k = it.lang + '|' + it.image;
+      if (seen[k]) return;
+      seen[k] = 1;
+      jobs.push({ sizes: ['low', 'high'].map(function (z) { return imageUrls(it.image, it.lang, [z]); }) });
+    });
+    return jobs;
+  }
+  function anyCached(c, urls) {
+    return Promise.all(urls.map(function (u) { return c.match(u); })).then(function (r) { return r.some(Boolean); });
+  }
+  function offCount() {
+    var jobs = wishImageJobs();
+    /* Den Speicher beim Zählen nicht neu anlegen, wenn es ihn nicht gibt */
+    return caches.has(IMG_CACHE).then(function (has) {
+      return has ? caches.open(IMG_CACHE) : null;
+    }).then(function (c) {
+      if (!c) return { total: jobs.length, have: 0 };
+      return Promise.all(jobs.map(function (j) {
+        return Promise.all(j.sizes.map(function (urls) { return anyCached(c, urls); })).then(function (r) { return r.every(Boolean); });
+      })).then(function (r) { return { total: jobs.length, have: r.filter(Boolean).length }; });
+    });
+  }
+  function probeImage(url) {
+    return new Promise(function (ok, bad) {
+      var im = new Image();
+      im.onload = ok; im.onerror = function () { bad(new Error('Bild')); };
+      im.src = url;
+    });
+  }
+  /* Mit CORS-Freigabe lässt sich der Status prüfen; ohne sie wird das Bild erst per Bildelement geprüft. */
+  function fetchImage(url) {
+    return fetch(url, { mode: 'cors' }).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r;
+    }, function () {
+      return probeImage(url).then(function () { return fetch(url, { mode: 'no-cors' }); });
+    });
+  }
+  function storeFirst(c, urls) {
+    return anyCached(c, urls).then(function (have) {
+      if (have) return true;
+      var i = 0;
+      function next() {
+        if (i >= urls.length) return Promise.resolve(false);
+        var u = urls[i++];
+        return fetchImage(u).then(function (res) { return c.put(u, res).then(function () { return true; }); }, next);
+      }
+      return next();
+    });
+  }
+  function renderOffline() {
+    var box = $('#offBox');
+    if (curKind !== 'wish' || !offSupported()) { box.hidden = true; return; }
+    box.hidden = false;
+    if (offBusy) return;
+    var t = ++offToken, btn = $('#offBtn'), stat = $('#offStat');
+    btn.textContent = 'Bilder offline speichern';
+    if (!wishImageJobs().length) { btn.disabled = true; stat.textContent = 'Auf der Wunschliste gibt es noch keine Karte mit Bild.'; return; }
+    offCount().then(function (r) {
+      if (t !== offToken || offBusy) return;
+      btn.disabled = r.have >= r.total;
+      stat.textContent = 'Offline verfügbar: ' + r.have + ' von ' + r.total + ' Karten' +
+        (r.have >= r.total ? ' ✓' : ' · ' + (r.total - r.have) + ' fehlen noch') + (offNote ? ' · ' + offNote : '');
+    }).catch(function () { box.hidden = true; });
+  }
+  function offDownload() {
+    if (offBusy) { offCancel = true; $('#offStat').textContent = 'Wird abgebrochen …'; return; }
+    var jobs = wishImageJobs();
+    if (!jobs.length) return;
+    offBusy = true; offCancel = false; offNote = '';
+    var btn = $('#offBtn'), stat = $('#offStat');
+    btn.textContent = 'Abbrechen'; btn.disabled = false;
+    stat.textContent = 'Lade … 0 von ' + jobs.length + ' Karten';
+    try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
+    var done = 0, bad = 0, cache = null;
+    caches.open(IMG_CACHE).then(function (c) {
+      cache = c;
+      var tasks = jobs.map(function (j) {
+        return function () {
+          if (offCancel) return Promise.resolve();
+          return Promise.all(j.sizes.map(function (urls) { return storeFirst(c, urls); })).then(function (r) {
+            if (!r.every(Boolean)) bad++;
+            done++;
+            if (!offCancel) stat.textContent = 'Lade … ' + done + ' von ' + jobs.length + ' Karten';
+          });
+        };
+      });
+      return pool(tasks, 4);
+    }).then(function () {
+      if (offCancel) { offNote = 'abgebrochen'; return; }
+      /* Bilder von Karten, die nicht mehr auf der Wunschliste stehen, wieder entfernen */
+      var keep = {};
+      jobs.forEach(function (j) { j.sizes.forEach(function (urls) { urls.forEach(function (u) { keep[u] = 1; }); }); });
+      return cache.keys().then(function (keys) {
+        return Promise.all(keys.filter(function (rq) { return !keep[rq.url]; }).map(function (rq) { return cache.delete(rq); }));
+      }).then(function () { if (bad) offNote = bad + ' ohne ladbares Bild'; });
+    }).catch(function () { offNote = 'Speichern nicht möglich'; }).then(function () {
+      offBusy = false; offCancel = false;
+      renderOffline();
+    });
+  }
+  function offClearAll() {
+    if (offBusy) return;
+    offNote = '';
+    caches.delete(IMG_CACHE).catch(function () {}).then(renderOffline);
   }
 
   /* ---------- Sprachwahl ---------- */
@@ -1103,6 +1230,7 @@ a{color:var(--accent)}
   function renderCollection() {
     updateSetProgress(); refreshOwnHints();
     renderSelect();
+    renderOffline();
     $('#sortSel').value = state.sort || 'name';
     var col = active();
     var wishMode = curKind === 'wish';
@@ -1869,6 +1997,8 @@ a{color:var(--accent)}
     else { token++; results = []; $('#results').replaceChildren(); $('#moreBtn').hidden = true; setStatus('Wähle ein Set oder gib einen Kartennamen ein.'); }
   });
 
+  $('#offBtn').addEventListener('click', offDownload);
+  $('#offClear').addEventListener('click', offClearAll);
   $('#spHide').addEventListener('change', function () {
     hideOwned = this.checked;
     try { localStorage.setItem(HO_KEY, hideOwned ? '1' : '0'); } catch (e) {}
