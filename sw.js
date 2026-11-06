@@ -1,5 +1,5 @@
 /* Hält die App-Dateien offline bereit. Karten-API und Bilder laufen immer übers Netz. */
-var CACHE = 'pokesammlung-v3';
+var CACHE = 'pokesammlung-v6';
 var FILES = ['./', 'index.html', 'sync.js', 'firebase-config.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'icon-maskable-192.png', 'icon-maskable-512.png'];
 
 self.addEventListener('install', function (e) {
@@ -18,6 +18,8 @@ self.addEventListener('fetch', function (e) {
   /* Zuerst das Netz (damit Updates sofort ankommen), ohne Netz die gespeicherte Kopie. */
   e.respondWith(
     fetch(req).then(function (res) {
+      /* Fehlerseiten (zum Beispiel 404 bei einer Störung) weder anzeigen noch speichern, stattdessen die gespeicherte Kopie nehmen. */
+      if (!res.ok) throw new Error('HTTP ' + res.status);
       var copy = res.clone();
       caches.open(CACHE).then(function (c) { c.put(req, copy); });
       return res;
