@@ -146,6 +146,20 @@ a{color:var(--accent)}
 .syncform input{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 10px;width:100%;min-width:0}
 .syncchoices{display:flex;flex-direction:column;gap:8px;margin:10px 0}
 .syncchoices .btn{white-space:normal;text-align:left}
+.setprog{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;margin:0 0 10px;display:flex;flex-direction:column;gap:8px}
+.setprog[hidden]{display:none}
+.spline{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.spline strong{font-size:1.05rem;font-variant-numeric:tabular-nums}
+.spline .sppct{font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums}
+.spbar{height:8px;border-radius:999px;background:var(--line);overflow:hidden}
+.spfill{display:block;height:100%;background:var(--accent);border-radius:999px;transition:width .25s}
+.swrow{display:flex;gap:10px;align-items:center;font-size:.88rem;cursor:pointer;width:fit-content;max-width:100%}
+.switch{appearance:none;-webkit-appearance:none;width:34px;height:20px;border-radius:999px;background:var(--muted);position:relative;flex:0 0 auto;margin:0;cursor:pointer;border:0}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--surface);transition:transform .15s}
+.switch:checked{background:var(--accent)}
+.switch:checked::after{transform:translateX(14px)}
+.own{color:var(--ok);font-weight:600;font-size:.8rem;overflow-wrap:anywhere}
+.own:empty{display:none}
 </style>
 </head>
 <body>
@@ -177,6 +191,11 @@ a{color:var(--accent)}
       </div>
       <div id="setSuggest" class="suggest" hidden></div>
       <div id="status" class="status" role="status" aria-live="polite">Gib einen Namen ein und wähle die Sprache der Karte.</div>
+      <div id="setProgress" class="setprog" hidden>
+        <div class="spline"><strong id="spText"></strong><span class="sppct" id="spPct"></span></div>
+        <div class="spbar" id="spBar" role="progressbar" aria-label="Fortschritt im Set" aria-valuemin="0" aria-valuemax="100"><span class="spfill" id="spFill"></span></div>
+        <label class="swrow"><input type="checkbox" class="switch" id="spHide"><span>Karten ausblenden, die ich habe <span class="meta" id="spHideN"></span></span></label>
+      </div>
       <div id="results" class="grid"></div>
       <div class="row" style="justify-content:center;margin-top:12px"><button class="btn" id="moreBtn" type="button" hidden>Mehr anzeigen</button></div>
     </section>
@@ -457,7 +476,7 @@ a{color:var(--accent)}
         type: 'button', 'aria-pressed': String(state.lang === l[0]), text: l[1],
         onclick: function () {
           state.lang = l[0]; save(); renderLangs();
-          curSet = ''; $('#setFilter').value = '';
+          curSet = ''; $('#setFilter').value = ''; updateSetProgress();
           loadSets();
           if ($('#q').value.trim()) search();
           else { token++; results = []; $('#results').replaceChildren(); $('#moreBtn').hidden = true; setStatus('Wähle ein Set oder gib einen Kartennamen ein.'); }
@@ -512,6 +531,63 @@ a{color:var(--accent)}
   }
   /* ---------- Sets ---------- */
   var curSet = '', allSets = [], setsCache = {}, setCardsCache = {};
+
+  /* ---------- Besitz und Set-Fortschritt ---------- */
+  var HO_KEY = 'pokesammlung.hideowned';
+  var hideOwned = false;
+  try { hideOwned = localStorage.getItem(HO_KEY) === '1'; } catch (e) {}
+  var curSetCards = null, curSetKey = '';
+  /* Was du je Karte (nach Sprache) in irgendeiner Sammlung hast; die Wunschliste zählt nicht als Besitz. */
+  function ownedMap(lang) {
+    var m = {};
+    state.collections.forEach(function (c) {
+      (c.items || []).forEach(function (i) {
+        if (i.lang !== lang || !(i.qty > 0)) return;
+        var o = m[i.id] || (m[i.id] = { n: 0, r: 0 });
+        if (variantOf(i) === 'reverse') o.r += i.qty; else o.n += i.qty;
+      });
+    });
+    return m;
+  }
+  function wishMap(lang) {
+    var m = {};
+    (state.wish || []).forEach(function (i) { if (i.lang === lang) m[i.id] = true; });
+    return m;
+  }
+  function ownText(o, w) {
+    var t = '';
+    if (o && o.n && o.r) t = 'Du hast: Normal ' + o.n + '× · Reverse ' + o.r + '×';
+    else if (o && o.n) t = 'Du hast: ' + o.n + '×';
+    else if (o && o.r) t = 'Du hast: Reverse Holo ' + o.r + '×';
+    if (w) t += (t ? ' · ' : '') + 'Auf der Wunschliste';
+    return t;
+  }
+  function refreshOwnHints() {
+    var nodes = document.querySelectorAll('#results .card[data-cid]');
+    if (!nodes.length) return;
+    var om = {}, wm = {};
+    nodes.forEach(function (n) {
+      var lang = n.dataset.lang;
+      if (!om[lang]) { om[lang] = ownedMap(lang); wm[lang] = wishMap(lang); }
+      var h = n.querySelector('.own');
+      if (h) h.textContent = ownText(om[lang][n.dataset.cid], wm[lang][n.dataset.cid]);
+    });
+  }
+  function updateSetProgress() {
+    var box = $('#setProgress');
+    if (!curSet || !curSetCards || !curSetCards.length || curSetKey !== state.lang + ':' + curSet) { box.hidden = true; return; }
+    var om = ownedMap(state.lang), have = 0, total = curSetCards.length;
+    curSetCards.forEach(function (c) { if (om[c.id]) have++; });
+    /* Nie 0 % mit Karten und nie 100 % ohne vollständiges Set */
+    var pct = have === total ? 100 : have === 0 ? 0 : Math.min(99, Math.max(1, Math.round(have / total * 100)));
+    $('#spText').textContent = have + ' von ' + total + ' Karten';
+    $('#spPct').textContent = pct + ' %';
+    $('#spFill').style.width = pct + '%';
+    $('#spBar').setAttribute('aria-valuenow', String(pct));
+    $('#spHide').checked = hideOwned;
+    $('#spHideN').textContent = have ? '(' + have + ')' : '';
+    box.hidden = false;
+  }
   function fetchSets(lang) {
     var p = setsCache[lang];
     if (!p) {
@@ -620,19 +696,29 @@ a{color:var(--accent)}
     setStatus('Set wird geladen …');
     $('#results').replaceChildren();
     $('#moreBtn').hidden = true;
+    curSetCards = null; updateSetProgress();
     var ck = lang + ':' + id;
     var p = setCardsCache[ck] || (setCardsCache[ck] = fetch(API + lang + '/sets/' + encodeURIComponent(id))
       .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(function (s) { return Array.isArray(s.cards) ? s.cards : []; }));
     p.then(function (cards) {
       if (t !== token) return;
+      curSetCards = cards; curSetKey = lang + ':' + id;
+      updateSetProgress();
       var list = cards;
       if (pq.q) list = list.filter(function (c) { return String(c.name || '').toLowerCase().indexOf(pq.q.toLowerCase()) >= 0; });
       if (pq.numWanted != null) list = list.filter(function (c) { return parseInt(String(c.localId || '').replace(/\D/g, ''), 10) === pq.numWanted; });
+      var hiddenN = 0;
+      if (hideOwned) {
+        var om = ownedMap(lang), before = list.length;
+        list = list.filter(function (c) { return !om[c.id]; });
+        hiddenN = before - list.length;
+      }
       results = list;
       shown = 0;
       if (!list.length) {
-        setStatus(cards.length ? 'In diesem Set passt keine Karte zu deiner Eingabe (' + cards.length + ' Karten im Set).' : 'Für dieses Set liefert die API keine Karten.');
+        if (hiddenN) setStatus('Alle passenden Karten hast du schon (' + hiddenN + ' ausgeblendet). Schalte den Schalter aus, um sie zu sehen.');
+        else setStatus(cards.length ? 'In diesem Set passt keine Karte zu deiner Eingabe (' + cards.length + ' Karten im Set).' : 'Für dieses Set liefert die API keine Karten.');
         return;
       }
       setStatus(list.length + (pq.q || pq.numWanted != null ? ' passende Karten im Set. Preise werden geladen …' : ' Karten im Set. Preise werden geladen …'));
@@ -646,6 +732,7 @@ a{color:var(--accent)}
 
   function search() {
     if (curSet) { showSet(); return; }
+    updateSetProgress();
     PAGE = 24;
     var raw = $('#q').value.trim();
     if (!raw) return;
@@ -704,6 +791,7 @@ a{color:var(--accent)}
         }).catch(function () { if (t === token) tile.fail(); });
       };
     });
+    refreshOwnHints();
     pool(tasks, 6).then(function () {
       if (t === token) setStatus(results.length + ' Treffer, ' + shown + ' angezeigt.');
     });
@@ -801,7 +889,8 @@ a{color:var(--accent)}
     var node = el('article', { class: 'card' },
       zoomBtn,
       el('div', { class: 'cname', text: base.name || base.id }),
-      meta, priceLine, varSel, actions);
+      meta, el('div', { class: 'own' }), priceLine, varSel, actions);
+    node.dataset.cid = base.id; node.dataset.lang = lang;
     return {
       node: node,
       fill: function (card) {
@@ -1012,6 +1101,7 @@ a{color:var(--accent)}
     $('#ovMissing').textContent = tot.missing ? tot.missing + ' Karte(n) ohne Preis sind nicht enthalten' : '';
   }
   function renderCollection() {
+    updateSetProgress(); refreshOwnHints();
     renderSelect();
     $('#sortSel').value = state.sort || 'name';
     var col = active();
@@ -1773,9 +1863,16 @@ a{color:var(--accent)}
   });
   $('#setSel').addEventListener('change', function (e) {
     curSet = e.target.value;
+    updateSetProgress();
     if (curSet) showSet();
     else if ($('#q').value.trim()) search();
     else { token++; results = []; $('#results').replaceChildren(); $('#moreBtn').hidden = true; setStatus('Wähle ein Set oder gib einen Kartennamen ein.'); }
+  });
+
+  $('#spHide').addEventListener('change', function () {
+    hideOwned = this.checked;
+    try { localStorage.setItem(HO_KEY, hideOwned ? '1' : '0'); } catch (e) {}
+    if (curSet) showSet();
   });
 
   /* Schnittstelle für die Synchronisation (sync.js) */
