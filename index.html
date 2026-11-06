@@ -4,104 +4,211 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Pokésammlung</title>
-<meta name="theme-color" content="#2347c5">
+<meta name="theme-color" content="#0b7f86">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Pokésammlung">
 <style>
-/* Layout: eine Spalte, oben Sammlungsauswahl, darunter Umschalter Suche / Sammlung. */
+/* Layout: eine Spalte, oben Titel und Synchronisation, unten die Navigation. Alle Farben kommen aus den Variablen oben. */
 :root{
-  --bg:#f3f4f6; --surface:#ffffff; --ink:#14181d; --muted:#5b6571; --line:#dce0e5;
-  --accent:#2347c5; --accent-ink:#ffffff; --ok:#17794a; --warn:#a85a00; --danger:#b3261e;
+  --bg:#f2f7f6; --surface:#ffffff; --surface2:#e9f1ef; --ink:#12201f; --muted:#566a68; --line:#dbe6e3;
+  --accent:#0b7f86; --accent-ink:#ffffff; --accent-soft:#ddf2f1; --ok:#14774a; --warn:#a85a00; --danger:#b3261e;
   --scrim:rgba(8,10,14,.94); --lb-ink:#f2f4f7;
-  --radius:10px;
+  --radius:14px; --radius-s:10px;
+  --shadow:0 1px 2px rgba(20,30,60,.05),0 3px 12px rgba(20,30,60,.05);
   --font:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
   color-scheme:light;
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
-    --bg:#0f1317; --surface:#171c22; --ink:#e8ebef; --muted:#97a2af; --line:#2a313a;
-    --accent:#86a3ff; --accent-ink:#0b1020; --ok:#5fcf93; --warn:#f0b35c; --danger:#ff8b82;
+    --bg:#0b1415; --surface:#132021; --surface2:#1a2b2c; --ink:#e6f1f0; --muted:#93aaa8; --line:#243a3b;
+    --accent:#55d0c8; --accent-ink:#04201f; --accent-soft:#12393a; --ok:#5fcf93; --warn:#f0b35c; --danger:#ff8b82;
+    --shadow:0 1px 2px rgba(0,0,0,.3);
     color-scheme:dark;
   }
 }
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 var(--font)}
-.wrap{max-width:980px;margin:0 auto;padding-block:16px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
-h1{font-size:1.35rem;margin:0 0 2px;letter-spacing:-.01em}
-.sub{color:var(--muted);margin:0 0 14px;font-size:.9rem}
+.wrap{max-width:980px;margin:0 auto;padding-block:14px calc(96px + env(safe-area-inset-bottom,0px));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1{font-size:1.3rem;margin:0;letter-spacing:-.015em}
 button,input,select{font:inherit;color:inherit}
 button{cursor:pointer}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px}
+a{color:var(--accent)}
+.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}
+.syncbox summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;gap:7px;max-width:100%;padding:6px 12px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-size:.8rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.syncbox summary::-webkit-details-marker{display:none}
+.syncbox summary::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--muted);flex:0 0 auto}
+.syncbox[open]{flex:1 1 100%;order:3;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;box-shadow:var(--shadow)}
+.syncbox[open] summary{border:0;padding:0 0 8px;background:none;color:var(--ink);font-weight:600;font-size:.9rem}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow)}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.grow{flex:1 1 180px;min-width:0}
-input[type=search],input[type=text],input[type=number],select{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 10px;min-width:0;width:100%}
-input[type=number]{width:96px}
-.btn{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 12px;white-space:nowrap}
+.grow{flex:1 1 160px;min-width:0}
+input[type=search],input[type=text],input[type=number],select{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-s);padding:10px 12px;min-width:0;width:100%}
+input[type=number]{width:130px}
+.item .ctrl input[type=number]{flex:1 1 140px;width:auto}
+.btn{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-s);padding:9px 14px;white-space:nowrap}
 .btn:hover{border-color:var(--accent)}
 .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
-.btn.small{padding:5px 9px;font-size:.85rem}
+.btn.small{padding:6px 11px;font-size:.85rem}
 .btn.danger{color:var(--danger)}
-.tabs{display:grid;grid-template-columns:2fr 2fr 1fr;gap:4px;background:var(--line);padding:4px;border-radius:12px;margin:12px 0}
-.tabs button{border:0;background:transparent;padding:9px 4px;border-radius:9px;font-weight:600;color:var(--muted);min-width:0}
-.tabs button[aria-selected=true]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
-.tabs .wishtab{font-size:.78rem;line-height:1.15;hyphens:manual;overflow-wrap:anywhere}
-.kindtitle{font-size:1.05rem;margin:0 0 10px;overflow-wrap:anywhere}
-.thumbbtn{display:block;width:100%;border:0;padding:0;background:none;border-radius:6px;cursor:zoom-in}
-.manage{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;margin-bottom:10px}
-.manage summary{cursor:pointer;font-weight:600;overflow-wrap:anywhere}
-.manage[open] summary{margin-bottom:10px}
-.choice select{flex:1 1 100%;padding:6px 8px}
-.choice .meta{flex:1 1 100%}
-.lb select{background:rgba(255,255,255,.14);color:var(--lb-ink);border-color:rgba(255,255,255,.3)}
-.lb select option{background:var(--surface);color:var(--ink)}
-.choice{display:flex;gap:6px;flex-wrap:wrap;align-items:center;min-height:30px}
-.langs{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
-.langs button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 12px;font-size:.88rem}
+.btn:disabled{opacity:.5;cursor:default}
+.iconbtn{min-width:44px}
+.searchbar{display:flex;gap:8px}
+.searchbar input{flex:1 1 auto}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 0}
+.chips:empty{display:none}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 12px;font-size:.84rem;max-width:100%;overflow-wrap:anywhere;text-align:left}
+.chip.on{background:var(--accent-soft);border-color:transparent;color:var(--accent);font-weight:600;padding-right:4px}
+.chip .x{border:0;background:none;color:inherit;width:24px;height:24px;border-radius:50%;padding:0;line-height:1;font-size:1.1rem}
+.filterpanel{margin-top:10px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px;display:flex;flex-direction:column;gap:8px;box-shadow:var(--shadow)}
+.filterpanel[hidden]{display:none}
+.flabel{font-size:.75rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.langs{display:flex;gap:6px;flex-wrap:wrap}
+.langs button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 12px;font-size:.86rem}
 .langs button[aria-pressed=true]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
-.overview{margin-bottom:10px}
-.overview[hidden]{display:none}
-.ovlist{display:flex;flex-direction:column;gap:6px}
-.ovrow{display:flex;justify-content:space-between;align-items:baseline;gap:10px;width:100%;text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 10px}
-.ovrow[aria-current=true]{border-color:var(--accent)}
-.ovrow .nm{min-width:0;overflow-wrap:anywhere}
-.ovrow .v{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
-.setrow{margin-bottom:4px}
-.suggest{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 6px}
+.suggest{display:flex;flex-wrap:wrap;gap:6px}
 .suggest[hidden]{display:none}
 .suggest .btn{white-space:normal;text-align:left}
-.status{min-height:1.4em;margin:10px 2px;color:var(--muted);font-size:.9rem}
+.status{min-height:1.4em;margin:10px 2px;color:var(--muted);font-size:.88rem}
+.status:empty{display:none}
 .status.err{color:var(--danger)}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
-.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:8px;display:flex;flex-direction:column;gap:6px;min-width:0}
-.thumb{aspect-ratio:5/7;background:var(--bg);border-radius:6px;overflow:hidden;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.8rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:8px;display:flex;flex-direction:column;gap:6px;min-width:0;box-shadow:var(--shadow)}
+.card .cname{padding:0 2px}
+.card .meta,.card .price,.card .own{padding:0 2px}
+.thumb{aspect-ratio:5/7;background:var(--surface2);border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.8rem}
 .thumb img{width:100%;height:100%;object-fit:contain;display:block}
-.cname{font-weight:600;font-size:.92rem;overflow-wrap:anywhere}
+.thumbbtn{display:block;width:100%;border:0;padding:0;background:none;border-radius:8px;cursor:zoom-in}
+.cname{font-weight:600;font-size:.95rem;overflow-wrap:anywhere}
 .meta{color:var(--muted);font-size:.8rem;overflow-wrap:anywhere}
 .price{font-variant-numeric:tabular-nums;font-weight:600}
 .price.none{color:var(--warn);font-weight:500;font-size:.82rem}
-.summary{display:flex;flex-wrap:wrap;gap:16px 28px;align-items:baseline;margin-bottom:10px}
-.total{font-size:1.7rem;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
-.list{display:flex;flex-direction:column;gap:8px;margin-top:10px}
-.item{display:grid;grid-template-columns:52px minmax(0,1fr);gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:8px}
-.item .thumb{width:52px}
-.item .ctrl{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.vsel{width:auto;padding:5px 8px;font-size:.85rem}
-.card .vsel{width:100%;margin-bottom:6px}
-.badge{display:inline-block;border:1px solid var(--line);border-radius:6px;padding:0 6px;font-size:.75rem;color:var(--muted);margin-right:4px;text-transform:uppercase}
-.qty{display:inline-flex;align-items:center;gap:6px}
-.qty button{width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:var(--surface);padding:0}
-.qty span{min-width:1.6em;text-align:center;font-variant-numeric:tabular-nums}
-.line{margin-left:auto;font-variant-numeric:tabular-nums;font-weight:600}
-a{color:var(--accent)}
-.note{color:var(--muted);font-size:.85rem;margin-top:14px}
-.empty{padding:28px 12px;text-align:center;color:var(--muted)}
+.own{color:var(--ok);font-weight:600;font-size:.8rem;overflow-wrap:anywhere}
+.own:empty{display:none}
+.choice{display:flex;gap:6px;flex-wrap:wrap;align-items:center;min-height:32px}
+.choice select{flex:1 1 100%;padding:7px 9px}
+.choice .meta{flex:1 1 100%}
+.choice .btn.primary{flex:1 1 auto}
+.vsel{width:auto;padding:6px 9px;font-size:.85rem}
+.card .vsel{width:100%;margin-bottom:2px}
+.setprog{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;margin:0 0 12px;display:flex;flex-direction:column;gap:8px;box-shadow:var(--shadow)}
+.setprog[hidden]{display:none}
+.spline{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.spline strong{font-size:1.02rem;font-variant-numeric:tabular-nums}
+.spline .sppct{font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums}
+.spbar{height:8px;border-radius:999px;background:var(--surface2);overflow:hidden}
+.spfill{display:block;height:100%;background:var(--accent);border-radius:999px;transition:width .25s}
+.swrow{display:flex;gap:10px;align-items:center;font-size:.88rem;cursor:pointer;width:fit-content;max-width:100%}
+.switch{appearance:none;-webkit-appearance:none;width:36px;height:22px;border-radius:999px;background:var(--muted);position:relative;flex:0 0 auto;margin:0;cursor:pointer;border:0}
+.switch::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:var(--surface);transition:transform .15s}
+.switch:checked{background:var(--accent)}
+.switch:checked::after{transform:translateX(14px)}
+
+/* Sammlung und Wunschliste */
+.collbar{display:flex;gap:8px;align-items:center;margin-bottom:12px}
+.collpick{flex:1 1 auto;min-width:0}
+.collpick select{font-weight:600;font-size:1rem;padding:11px 12px}
+.kindtitle{font-size:1.1rem;margin:0;overflow-wrap:anywhere}
+.collbar .kindtitle{flex:1 1 auto;min-width:0}
+.kindtitle[hidden]{display:none}
+.menu{position:relative;flex:0 0 auto}
+.menubtn{width:46px;height:46px;font-size:1.4rem;line-height:1;padding:0;display:flex;align-items:center;justify-content:center}
+.menupanel{position:absolute;right:0;top:calc(100% + 6px);z-index:30;width:min(300px,calc(100vw - 32px));background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 10px 32px rgba(0,0,0,.2);padding:6px;display:flex;flex-direction:column}
+.menupanel[hidden]{display:none}
+.mitem{display:block;width:100%;text-align:left;border:0;background:none;padding:11px 12px;border-radius:9px;color:var(--ink);cursor:pointer}
+.mitem:hover{background:var(--surface2)}
+.mitem.danger{color:var(--danger)}
+.msep{height:1px;background:var(--line);margin:6px 4px}
+.menupanel .offbox{padding:6px 12px 8px}
+.menupanel .offbox .btn{flex:1 1 auto}
+.offbox{display:flex;flex-direction:column;gap:6px}
+.offbox[hidden]{display:none}
+.mlabel{font-size:.72rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);padding:6px 12px 2px}
+.valuehead{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+.vhrow{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.vhmain{min-width:0}
+.total{font-size:1.9rem;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1.15}
+.vhdelta{font-weight:600;font-size:.88rem;font-variant-numeric:tabular-nums;min-height:1.2em}
+.vhdelta.up{color:var(--ok)}
+.vhdelta.down{color:var(--danger)}
+.spark{flex:0 0 110px;height:44px}
+.spark svg{width:100%;height:100%;display:block;overflow:visible}
+.vhfoot{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:baseline;font-size:.88rem}
+.vhfoot b{font-variant-numeric:tabular-nums}
+.linkbtn{border:0;background:none;color:var(--accent);font-weight:600;font-size:.88rem;padding:6px 0 0;text-align:left;align-self:flex-start}
+#ovWrap{margin-bottom:12px}
+#ovWrap[hidden]{display:none}
+.overview[hidden]{display:none}
+.ovlist{display:flex;flex-direction:column;gap:6px}
+.ovrow{display:flex;justify-content:space-between;align-items:baseline;gap:10px;width:100%;text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:var(--radius-s);padding:9px 11px}
+.ovrow[aria-current=true]{border-color:var(--accent);background:var(--accent-soft)}
+.ovrow .nm{min-width:0;overflow-wrap:anywhere}
+.ovrow .v{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
+.summary{display:flex;flex-wrap:wrap;gap:12px 28px;align-items:baseline;margin-bottom:10px}
+.listhead{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:14px 2px 8px;flex-wrap:wrap}
+.sortwrap{display:flex;gap:8px;align-items:center;min-width:0}
+.sortwrap select{width:auto;max-width:200px;padding:7px 10px;font-size:.88rem}
+.list{display:flex;flex-direction:column;gap:10px}
+.item{display:grid;grid-template-columns:56px minmax(0,1fr) auto;grid-template-areas:"thumb main side" "ctrl ctrl ctrl";gap:0 12px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:10px;box-shadow:var(--shadow)}
+.item .thumbbtn{grid-area:thumb}
+.item .thumb{width:56px}
+.rowtap{grid-area:main;display:block;text-align:left;border:0;background:none;padding:2px 0;min-width:0;color:inherit}
+.rowtap .cname::after{content:"›";display:inline-block;margin-left:6px;color:var(--muted);transition:transform .15s}
+.item.open .rowtap .cname::after{transform:rotate(90deg)}
+.rowtap>.meta,.rowtap>.pl{display:block}
+.rowtap .pl{font-size:.84rem;font-variant-numeric:tabular-nums;margin-top:2px}
+.item .side{grid-area:side;display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.line{font-variant-numeric:tabular-nums;font-weight:700}
+.item .ctrl{grid-area:ctrl;display:none;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.item.open .ctrl{display:flex}
+.item .ctrl .pinfo{flex:1 1 100%}
+.badge{display:inline-block;border:1px solid var(--line);border-radius:6px;padding:0 6px;font-size:.72rem;color:var(--muted);margin-right:4px;text-transform:uppercase}
+.qty{display:inline-flex;align-items:center;gap:4px;background:var(--surface2);border-radius:999px;padding:2px}
+.qty button{width:30px;height:30px;border-radius:50%;border:0;background:var(--surface);padding:0;box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.qty span{min-width:1.7em;text-align:center;font-variant-numeric:tabular-nums;font-weight:600}
+.stale,.warnflag{color:var(--warn)}
+.rowtap .cname{display:block}
+.empty{padding:36px 12px;text-align:center;color:var(--muted)}
+.note{color:var(--muted);font-size:.85rem;margin-top:18px}
+.note summary{cursor:pointer;font-weight:600}
+.note p{margin:8px 0 0}
+.importbox{margin:0 0 12px;display:flex;flex-direction:column;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px}
+.importbox[hidden]{display:none}
+.importbox .opt{display:flex;flex-direction:column;gap:3px}
+.importbox .opt .btn{align-self:flex-start;white-space:normal;text-align:left}
+.chart{margin:10px 0 12px;display:flex;flex-direction:column;gap:6px}
+.ranges{display:flex;gap:4px;flex-wrap:wrap}
+.ranges button{padding:6px 11px;font-size:.85rem;border:1px solid var(--line);border-radius:999px;background:var(--surface)}
+.ranges button[aria-pressed=true]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.chdelta{font-weight:600;font-variant-numeric:tabular-nums;min-height:1.3em}
+.chdelta.up{color:var(--ok)}
+.chdelta.down{color:var(--danger)}
+#chSvg svg{width:100%;height:auto;display:block;touch-action:pan-y;overflow:visible}
+.chcheck{display:flex;gap:6px;align-items:center}
+.chcheck input{width:auto}
+.syncform{display:flex;flex-direction:column;gap:8px}
+.syncform input{background:var(--bg);border:1px solid var(--line);border-radius:var(--radius-s);padding:10px 12px;width:100%;min-width:0}
+.syncchoices{display:flex;flex-direction:column;gap:8px;margin:10px 0}
+.syncchoices .btn{white-space:normal;text-align:left}
+
+/* Navigation unten */
+.bottomnav{position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--surface);border-top:1px solid var(--line);padding:6px max(10px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(10px,env(safe-area-inset-left,0px))}
+.bottomnav .inner{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;max-width:980px;margin:0 auto}
+.bottomnav button{display:flex;flex-direction:column;align-items:center;gap:2px;border:0;background:none;color:var(--muted);padding:7px 4px;border-radius:12px;font-size:.75rem;font-weight:600;min-width:0}
+.bottomnav svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.bottomnav button[aria-selected=true]{color:var(--accent);background:var(--accent-soft)}
+.bottomnav .lbl{white-space:nowrap}
+
+/* Kartenansicht */
 .lb{position:fixed;inset:0;z-index:50;background:var(--scrim);color:var(--lb-ink);display:flex;flex-direction:column;gap:8px;padding:max(10px,env(safe-area-inset-top,0px)) max(12px,env(safe-area-inset-right,0px)) max(10px,env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px))}
 .lb[hidden]{display:none}
 .lb.saved #lbAddItems,.lb.saved #lbAddWish,.lb.saved #lbVar,.lb.saved #lbColl{display:none!important}
+.lb select{background:rgba(255,255,255,.14);color:var(--lb-ink);border-color:rgba(255,255,255,.3)}
+.lb select option{background:var(--surface);color:var(--ink)}
 .lb-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .lb-title{font-weight:600;min-width:0;overflow-wrap:anywhere}
 .lb-main{flex:1;min-height:0;display:flex;align-items:stretch;gap:6px}
@@ -118,143 +225,145 @@ a{color:var(--accent)}
 .lb .price.none{color:var(--warn)}
 .lb .btn{background:rgba(255,255,255,.14);color:var(--lb-ink);border-color:rgba(255,255,255,.3)}
 .lb .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
-@media (min-width:640px){
-  .item{grid-template-columns:52px minmax(0,1fr) auto}
-  .item .ctrl{grid-column:auto;justify-content:flex-end}
-}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
-.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:max(16px,env(safe-area-inset-bottom,0px));z-index:60;max-width:min(92vw,520px);display:flex;gap:14px;align-items:center;background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.3);font-size:.92rem}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:60;max-width:min(92vw,520px);display:flex;gap:14px;align-items:center;background:var(--ink);color:var(--bg);padding:11px 16px;border-radius:14px;box-shadow:0 6px 20px rgba(0,0,0,.3);font-size:.92rem}
 .toast[hidden]{display:none}
 .toast button{background:none;border:0;color:inherit;font-weight:700;text-decoration:underline;padding:4px 2px;white-space:nowrap}
-.importbox{margin-top:10px;display:flex;flex-direction:column;gap:10px}
-.importbox[hidden]{display:none}
-.stale{color:var(--warn)}
-.chart{margin:10px 0 12px;display:flex;flex-direction:column;gap:6px}
-.ranges{display:flex;gap:4px;flex-wrap:wrap}
-.ranges button{padding:5px 10px;font-size:.85rem;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
-.ranges button[aria-pressed=true]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
-.chdelta{font-weight:600;font-variant-numeric:tabular-nums;min-height:1.3em}
-.chdelta.up{color:var(--ok)}
-.chdelta.down{color:var(--danger)}
-#chSvg svg{width:100%;height:auto;display:block;touch-action:pan-y;overflow:visible}
-.chcheck{display:flex;gap:6px;align-items:center}
-.chcheck input{width:auto}
-.importbox .opt{display:flex;flex-direction:column;gap:3px}
-.importbox .opt .btn{align-self:flex-start;white-space:normal;text-align:left}
-.syncbox{margin-bottom:12px}
-.syncform{display:flex;flex-direction:column;gap:8px}
-.syncform input{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 10px;width:100%;min-width:0}
-.syncchoices{display:flex;flex-direction:column;gap:8px;margin:10px 0}
-.syncchoices .btn{white-space:normal;text-align:left}
-.setprog{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;margin:0 0 10px;display:flex;flex-direction:column;gap:8px}
-.setprog[hidden]{display:none}
-.spline{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
-.spline strong{font-size:1.05rem;font-variant-numeric:tabular-nums}
-.spline .sppct{font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums}
-.spbar{height:8px;border-radius:999px;background:var(--line);overflow:hidden}
-.spfill{display:block;height:100%;background:var(--accent);border-radius:999px;transition:width .25s}
-.swrow{display:flex;gap:10px;align-items:center;font-size:.88rem;cursor:pointer;width:fit-content;max-width:100%}
-.switch{appearance:none;-webkit-appearance:none;width:34px;height:20px;border-radius:999px;background:var(--muted);position:relative;flex:0 0 auto;margin:0;cursor:pointer;border:0}
-.switch::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--surface);transition:transform .15s}
-.switch:checked{background:var(--accent)}
-.switch:checked::after{transform:translateX(14px)}
-.offbox{margin-top:10px;display:flex;flex-direction:column;gap:6px}
-.offbox[hidden]{display:none}
-.own{color:var(--ok);font-weight:600;font-size:.8rem;overflow-wrap:anywhere}
-.own:empty{display:none}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>Pokésammlung</h1>
-  <p class="sub">Karten auf Deutsch, Englisch, Japanisch, Koreanisch und Chinesisch suchen, in Sammlungen speichern und mit Cardmarket-Preisen bewerten.</p>
-
-  <details class="manage syncbox" id="syncBox">
-    <summary id="syncSummary">Synchronisation</summary>
-    <div id="syncBody"></div>
-  </details>
-
-  <div class="tabs" role="tablist">
-    <button role="tab" id="tab-search" aria-selected="true" aria-controls="view-search" type="button">Suche</button>
-    <button role="tab" id="tab-coll" aria-selected="false" aria-controls="view-coll" type="button">Sammlung <span id="countBadge"></span></button>
-    <button role="tab" id="tab-wish" class="wishtab" aria-selected="false" aria-controls="view-coll" type="button">Wunsch&shy;liste <span id="wishBadge"></span></button>
-  </div>
+  <header class="top">
+    <h1>Pokésammlung</h1>
+    <details class="syncbox" id="syncBox">
+      <summary id="syncSummary">Synchronisation</summary>
+      <div id="syncBody"></div>
+    </details>
+  </header>
 
   <main>
     <section id="view-search" role="tabpanel" aria-labelledby="tab-search">
-      <form id="searchForm" class="row" role="search">
-        <input id="q" type="search" class="grow" placeholder="Name, optional mit Nummer: Glurak 4/102" aria-label="Kartenname" autocomplete="off">
+      <form id="searchForm" class="searchbar" role="search">
+        <input id="q" type="search" placeholder="Kartenname" aria-label="Kartenname" autocomplete="off">
         <button class="btn primary" type="submit">Suchen</button>
+        <button class="btn" id="filterBtn" type="button" aria-expanded="false" aria-controls="filterPanel">Filter</button>
       </form>
-      <div class="langs" id="langs" role="group" aria-label="Sprache der Karten"></div>
-      <div class="row setrow">
-        <input id="setFilter" type="search" class="grow" placeholder="Sets filtern, zum Beispiel Obsidian" aria-label="Sets filtern" autocomplete="off">
-        <select id="setSel" class="grow" aria-label="Set auswählen"><option value="">Sets werden geladen …</option></select>
+      <div id="filterPanel" class="filterpanel" hidden>
+        <div class="flabel">Sprache der Karten</div>
+        <div class="langs" id="langs" role="group" aria-label="Sprache der Karten"></div>
+        <div class="flabel">Set</div>
+        <div class="row setrow">
+          <input id="setFilter" type="search" class="grow" placeholder="Sets filtern, zum Beispiel Obsidian" aria-label="Sets filtern" autocomplete="off">
+          <select id="setSel" class="grow" aria-label="Set auswählen"><option value="">Sets werden geladen …</option></select>
+        </div>
+        <div id="setSuggest" class="suggest" hidden></div>
       </div>
-      <div id="setSuggest" class="suggest" hidden></div>
-      <div id="status" class="status" role="status" aria-live="polite">Gib einen Namen ein und wähle die Sprache der Karte.</div>
+      <div id="chips" class="chips"></div>
+      <div id="status" class="status" role="status" aria-live="polite">Gib einen Kartennamen ein, auch mit Nummer wie „Glurak 4/102“, oder wähle unter „Filter“ ein Set.</div>
       <div id="setProgress" class="setprog" hidden>
         <div class="spline"><strong id="spText"></strong><span class="sppct" id="spPct"></span></div>
         <div class="spbar" id="spBar" role="progressbar" aria-label="Fortschritt im Set" aria-valuemin="0" aria-valuemax="100"><span class="spfill" id="spFill"></span></div>
         <label class="swrow"><input type="checkbox" class="switch" id="spHide"><span>Karten ausblenden, die ich habe <span class="meta" id="spHideN"></span></span></label>
       </div>
       <div id="results" class="grid"></div>
-      <div class="row" style="justify-content:center;margin-top:12px"><button class="btn" id="moreBtn" type="button" hidden>Mehr anzeigen</button></div>
+      <div class="row" style="justify-content:center;margin-top:14px"><button class="btn" id="moreBtn" type="button" hidden>Mehr anzeigen</button></div>
     </section>
 
     <section id="view-coll" role="tabpanel" data-kind="items" aria-label="Gespeicherte Karten" hidden>
-      <details class="manage" id="collManage">
-        <summary>Sammlung: <span id="manageName"></span> · wechseln oder verwalten</summary>
-        <div class="row">
-          <label for="coll" class="meta" style="flex:0 0 auto">Aktive Sammlung</label>
-          <select id="coll" class="grow"></select>
-          <button class="btn small" id="newColl" type="button">Neu</button>
-          <button class="btn small" id="renColl" type="button">Umbenennen</button>
-          <button class="btn small danger" id="delColl" type="button">Löschen</button>
+      <div class="collbar">
+        <div id="collManage" class="collpick">
+          <select id="coll" aria-label="Aktive Sammlung"></select>
+          <span id="manageName" hidden></span>
         </div>
-        <form id="nameForm" class="row" hidden style="margin-top:10px">
-          <input id="nameInput" type="text" class="grow" maxlength="60" aria-label="Name der Sammlung" placeholder="Name der Sammlung">
-          <button class="btn primary small" type="submit">Speichern</button>
-          <button class="btn small" id="nameCancel" type="button">Abbrechen</button>
-        </form>
-      </details>
-      <div class="panel overview" id="overview">
-        <h2 class="kindtitle">Gesamtübersicht aller Sammlungen</h2>
-        <div class="summary">
-          <div><div class="meta">Gesamtwert</div><div class="total" id="ovTotal">0,00 €</div></div>
-          <div><div class="meta">Karten</div><div class="price" id="ovCards">0</div></div>
-          <div><div class="meta">Sammlungen</div><div class="price" id="ovCount">0</div></div>
-          <div><div class="meta" id="ovMissing"></div></div>
-        </div>
-        <div class="row" style="margin:4px 0 6px">
-          <button class="btn primary small" id="refreshAll" type="button">Alle Preise aktualisieren</button>
-        </div>
-        <div id="ovStamp" class="meta"></div>
-        <div id="ovStatus" class="status" role="status" aria-live="polite"></div>
-        <div class="chart" id="chartBox">
-          <h3 class="kindtitle" style="margin:8px 0 0">Wertverlauf</h3>
-          <div class="row">
-            <select id="chScope" class="grow" aria-label="Verlauf für"></select>
-            <div id="chRanges" class="ranges" role="group" aria-label="Zeitraum"></div>
+        <h2 id="kindTitle" class="kindtitle" hidden>Wunschliste</h2>
+        <div class="menu">
+          <button class="btn menubtn" id="menuBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="menuPanel" aria-label="Weitere Aktionen">⋯</button>
+          <div id="menuPanel" class="menupanel" hidden>
+            <button class="mitem" id="refresh" type="button">Preise aktualisieren</button>
+            <button class="mitem" id="exportJson" type="button">Export JSON</button>
+            <button class="mitem" id="exportCsv" type="button">Export CSV</button>
+            <label class="mitem" for="importFile">Import JSON</label>
+            <input id="importFile" type="file" accept="application/json,.json" hidden>
+            <div id="collActions">
+              <div class="msep"></div>
+              <div class="mlabel">Sammlung verwalten</div>
+              <button class="mitem" id="newColl" type="button">Neue Sammlung</button>
+              <button class="mitem" id="renColl" type="button">Umbenennen</button>
+              <button class="mitem danger" id="delColl" type="button">Löschen</button>
+            </div>
+            <div id="offBox" class="offbox" hidden>
+              <div class="msep"></div>
+              <div class="mlabel">Wunschliste offline</div>
+              <div class="row">
+                <button class="btn primary small" id="offBtn" type="button">Bilder offline speichern</button>
+                <button class="btn small" id="offClear" type="button">Bilder-Speicher leeren</button>
+              </div>
+              <div id="offStat" class="meta" role="status" aria-live="polite"></div>
+            </div>
           </div>
-          <div id="chDelta" class="chdelta"></div>
-          <div id="chTip" class="meta"></div>
-          <div id="chSvg"></div>
-          <label class="meta chcheck"><input type="checkbox" id="chCount" checked> Kartenanzahl anzeigen (gestrichelt)</label>
-          <div class="meta">Der Verlauf zeigt auch Karten, die du hinzugefügt oder entfernt hast. Ein neuer Messpunkt entsteht jedes Mal, wenn du Preise aktualisierst.</div>
         </div>
-        <div id="ovList" class="ovlist"></div>
       </div>
-      <div class="panel">
-        <h2 id="kindTitle" class="kindtitle">Sammlung</h2>
-        <div class="summary">
-          <div><div class="meta" id="valLabel">Geschätzter Wert</div><div class="total" id="total">0,00 €</div></div>
-          <div><div class="meta">Karten</div><div class="price" id="cardCount">0</div></div>
-          <div><div class="meta" id="noPrice"></div></div>
+      <form id="nameForm" class="row" hidden style="margin-bottom:12px">
+        <input id="nameInput" type="text" class="grow" maxlength="60" aria-label="Name der Sammlung" placeholder="Name der Sammlung">
+        <button class="btn primary small" type="submit">Speichern</button>
+        <button class="btn small" id="nameCancel" type="button">Abbrechen</button>
+      </form>
+
+      <div class="panel valuehead" id="valueHead">
+        <div class="vhrow">
+          <div class="vhmain">
+            <div class="meta" id="valLabel">Geschätzter Wert</div>
+            <div class="total" id="total">0,00 €</div>
+            <div class="vhdelta" id="vhDelta"></div>
+          </div>
+          <div class="spark" id="vhSpark" aria-hidden="true"></div>
         </div>
-        <div class="row" style="margin-bottom:10px">
-          <label for="sortSel" class="meta">Sortieren nach</label>
-          <select id="sortSel" class="grow">
+        <div class="vhfoot">
+          <span><b id="cardCount">0</b> Karten</span>
+          <span class="meta" id="vhAll"></span>
+          <span class="meta" id="noPrice"></span>
+        </div>
+        <button class="linkbtn" id="ovToggle" type="button" aria-expanded="false" aria-controls="ovWrap">Verlauf und Übersicht anzeigen</button>
+      </div>
+
+      <div id="ovWrap" hidden>
+        <div class="panel overview" id="overview">
+          <h2 class="kindtitle" style="margin-bottom:10px">Gesamtübersicht aller Sammlungen</h2>
+          <div class="summary">
+            <div><div class="meta">Gesamtwert</div><div class="price" id="ovTotal" style="font-size:1.3rem">0,00 €</div></div>
+            <div><div class="meta">Karten</div><div class="price" id="ovCards">0</div></div>
+            <div><div class="meta">Sammlungen</div><div class="price" id="ovCount">0</div></div>
+            <div><div class="meta" id="ovMissing"></div></div>
+          </div>
+          <div class="row" style="margin:4px 0 6px">
+            <button class="btn primary small" id="refreshAll" type="button">Alle Preise aktualisieren</button>
+          </div>
+          <div id="ovStamp" class="meta"></div>
+          <div id="ovStatus" class="status" role="status" aria-live="polite"></div>
+          <div class="chart" id="chartBox">
+            <h3 class="kindtitle" style="margin:8px 0 0;font-size:1rem">Wertverlauf</h3>
+            <div class="row">
+              <select id="chScope" class="grow" aria-label="Verlauf für"></select>
+              <div id="chRanges" class="ranges" role="group" aria-label="Zeitraum"></div>
+            </div>
+            <div id="chDelta" class="chdelta"></div>
+            <div id="chTip" class="meta"></div>
+            <div id="chSvg"></div>
+            <label class="meta chcheck"><input type="checkbox" id="chCount" checked> Kartenanzahl anzeigen (gestrichelt)</label>
+            <div class="meta">Der Verlauf zeigt auch Karten, die du hinzugefügt oder entfernt hast. Ein neuer Messpunkt entsteht jedes Mal, wenn du Preise aktualisierst.</div>
+          </div>
+          <div id="ovList" class="ovlist"></div>
+        </div>
+      </div>
+
+      <div id="collStatus" class="status" role="status" aria-live="polite"></div>
+      <div id="importBox" class="importbox" hidden></div>
+
+      <div class="listhead">
+        <span class="meta" id="listInfo"></span>
+        <div class="sortwrap">
+          <label for="sortSel" class="meta">Sortieren</label>
+          <select id="sortSel">
             <option value="name">Name (A bis Z)</option>
             <option value="price-desc">Preis pro Karte (hoch zu niedrig)</option>
             <option value="price-asc">Preis pro Karte (niedrig zu hoch)</option>
@@ -264,29 +373,33 @@ a{color:var(--accent)}
             <option value="added">Zuletzt hinzugefügt</option>
           </select>
         </div>
-        <div class="row">
-          <button class="btn primary small" id="refresh" type="button">Preise aktualisieren</button>
-          <button class="btn small" id="exportJson" type="button">Export JSON</button>
-          <button class="btn small" id="exportCsv" type="button">Export CSV</button>
-          <label class="btn small" for="importFile">Import JSON</label>
-          <input id="importFile" type="file" accept="application/json,.json" hidden>
-        </div>
-        <div id="collStatus" class="status" role="status" aria-live="polite"></div>
-        <div id="importBox" class="importbox" hidden></div>
-        <div id="offBox" class="offbox" hidden>
-          <div class="row">
-            <button class="btn primary small" id="offBtn" type="button">Bilder offline speichern</button>
-            <button class="btn small" id="offClear" type="button">Bilder-Speicher leeren</button>
-          </div>
-          <div id="offStat" class="meta" role="status" aria-live="polite"></div>
-        </div>
       </div>
       <div id="list" class="list"></div>
     </section>
   </main>
 
-  <p class="note">Preise stammen aus den Cardmarket-Daten der TCGdex-API (Trend, sonst Durchschnitt). Für Karten ohne Preis, etwa viele koreanische und chinesische, trägst du einen eigenen Preis ein. Die eBay-Links öffnen die Suche nach verkauften Artikeln, eBay-Preise werden nicht automatisch übernommen. Tippe in den Suchergebnissen auf eine Karte, um sie zu vergrößern, und blättere mit den Pfeilen oder per Wischen weiter. Die Wunschliste ist unabhängig von deinen Sammlungen; ihre Bilder kannst du dort für die Nutzung ohne Netz speichern. Deine Daten liegen auf diesem Gerät. Mit einem Konto unter „Synchronisation“ werden sie auf deine anderen Geräte übertragen. Zusätzlich kannst du sie über Export JSON sichern.</p>
+  <details class="note">
+    <summary>Hinweise</summary>
+    <p>Preise stammen aus den Cardmarket-Daten der TCGdex-API (Trend, sonst Durchschnitt). Für Karten ohne Preis, etwa viele koreanische und chinesische, trägst du einen eigenen Preis ein. Die eBay-Links öffnen die Suche nach verkauften Artikeln, eBay-Preise werden nicht automatisch übernommen. Tippe in den Suchergebnissen auf eine Karte, um sie zu vergrößern, und blättere mit den Pfeilen oder per Wischen weiter. Die Wunschliste ist unabhängig von deinen Sammlungen; ihre Bilder kannst du dort für die Nutzung ohne Netz speichern. Deine Daten liegen auf diesem Gerät. Mit einem Konto unter „Synchronisation“ werden sie auf deine anderen Geräte übertragen. Zusätzlich kannst du sie über Export JSON sichern.</p>
+  </details>
 </div>
+
+<nav class="bottomnav" aria-label="Bereiche">
+  <div class="inner" role="tablist">
+    <button role="tab" id="tab-search" aria-selected="true" aria-controls="view-search" type="button">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
+      <span class="lbl">Suche</span>
+    </button>
+    <button role="tab" id="tab-coll" aria-selected="false" aria-controls="view-coll" type="button">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="12" height="15" rx="2"/><path d="M8 3.5h9a3 3 0 013 3V16"/></svg>
+      <span class="lbl">Sammlung <span id="countBadge"></span></span>
+    </button>
+    <button role="tab" id="tab-wish" aria-selected="false" aria-controls="view-coll" type="button">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 017-2.5A4 4 0 0119 10c0 5.6-7 10-7 10z"/></svg>
+      <span class="lbl">Wunschliste <span id="wishBadge"></span></span>
+    </button>
+  </div>
+</nav>
 
 <div id="toast" class="toast" role="status" aria-live="polite" hidden>
   <span id="toastMsg"></span>
@@ -700,7 +813,28 @@ a{color:var(--accent)}
       if (h) h.textContent = ownText(om[lang][n.dataset.cid], wm[lang][n.dataset.cid]);
     });
   }
+  /* Filter: Sprache und Set stehen als Chips über den Ergebnissen, die Auswahl selbst hinter dem Knopf „Filter“ */
+  function setFilterOpen(open) {
+    $('#filterPanel').hidden = !open;
+    $('#filterBtn').setAttribute('aria-expanded', String(open));
+  }
+  function renderFilterChips() {
+    var box = $('#chips');
+    box.replaceChildren();
+    var lname = (LANGS.filter(function (l) { return l[0] === state.lang; })[0] || LANGS[0])[1];
+    box.append(el('button', { class: 'chip', type: 'button', text: lname, 'aria-label': 'Sprache ändern: ' + lname, onclick: function () { setFilterOpen(true); } }));
+    if (curSet) {
+      var s = allSets.filter(function (x) { return x.id === curSet; })[0];
+      box.append(el('span', { class: 'chip on' },
+        el('span', { text: s ? setLabel(s) : curSet }),
+        el('button', { class: 'x', type: 'button', 'aria-label': 'Set-Auswahl aufheben', text: '×', onclick: function () {
+          $('#setSel').value = '';
+          $('#setSel').dispatchEvent(new Event('change'));
+        } })));
+    }
+  }
   function updateSetProgress() {
+    renderFilterChips();
     var box = $('#setProgress');
     if (!curSet || !curSetCards || !curSetCards.length || curSetKey !== state.lang + ':' + curSet) { box.hidden = true; return; }
     var om = ownedMap(state.lang), have = 0, total = curSetCards.length;
@@ -790,6 +924,7 @@ a{color:var(--accent)}
     curSet = id;
     $('#setFilter').value = '';
     renderSetOptions();
+    setFilterOpen(false);
     showSet();
   }
   var autoTimer = null;
@@ -806,6 +941,7 @@ a{color:var(--accent)}
       shownSets++;
     });
     renderSuggest(matchingSets());
+    renderFilterChips();
     if (f && !shownSets) sel.replaceChildren(el('option', { value: '', text: 'Kein Set passt zum Filter' }));
     if (curSet && Array.prototype.some.call(sel.options, function (o) { return o.value === curSet; })) sel.value = curSet;
     else sel.value = '';
@@ -1202,10 +1338,30 @@ a{color:var(--accent)}
     });
     return r;
   }
+  /* Kopf der Sammlung: Veränderung und kleine Kurve für die aktive Sammlung im gewählten Zeitraum */
+  function renderHead(tot) {
+    $('#vhAll').textContent = state.collections.length > 1 ? 'Alle Sammlungen: ' + money(tot.sum) : '';
+    var rg = RANGES.filter(function (r) { return r[0] === chart.range; })[0];
+    var s = rangeSlice(seriesFor(active().id), rg[2]);
+    var sp = $('#vhSpark'), dl = $('#vhDelta');
+    sp.replaceChildren(); dl.textContent = ''; dl.className = 'vhdelta';
+    if (s.length < 2) return;
+    var diff = r2(s[s.length - 1].v - s[0].v), base = s[0].v;
+    var pct = base > 0 ? ' (' + (diff >= 0 ? '+' : '−') + new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 }).format(Math.abs(diff / base * 100)) + ' %)' : '';
+    dl.textContent = (diff === 0 ? 'Unverändert' : (diff > 0 ? '+' : '−') + money(Math.abs(diff)) + pct) + ' · ' + rg[1];
+    if (diff > 0) dl.className = 'vhdelta up'; else if (diff < 0) dl.className = 'vhdelta down';
+    var W = 120, H = 44, P = 3, t0 = s[0].t, dt = (s[s.length - 1].t - t0) || 1, lo = Infinity, hi = -Infinity;
+    s.forEach(function (p) { if (p.v < lo) lo = p.v; if (p.v > hi) hi = p.v; });
+    if (lo === hi) { lo -= 1; hi += 1; }
+    var pts = s.map(function (p) { return (P + (p.t - t0) / dt * (W - 2 * P)).toFixed(1) + ',' + (P + (1 - (p.v - lo) / (hi - lo)) * (H - 2 * P)).toFixed(1); });
+    var svg = svgEl('svg', { viewBox: '0 0 ' + W + ' ' + H, preserveAspectRatio: 'none' });
+    svg.append(svgEl('polyline', { points: pts.join(' '), fill: 'none', stroke: 'var(--accent)', 'stroke-width': 2.2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round', 'vector-effect': 'non-scaling-stroke' }));
+    sp.append(svg);
+  }
   function renderOverview(hide) {
     var box = $('#overview');
     box.hidden = hide;
-    if (hide) return;
+    if (hide) { $('#vhAll').textContent = ''; $('#vhDelta').textContent = ''; $('#vhSpark').replaceChildren(); return; }
     var tot = { sum: 0, cards: 0, missing: 0 };
     var rows = $('#ovList');
     rows.replaceChildren();
@@ -1225,8 +1381,11 @@ a{color:var(--accent)}
     $('#ovStamp').textContent = stampText();
     if (!(state.history || []).length && recordSnapshot()) save();
     renderChart();
+    renderHead(tot);
     $('#ovMissing').textContent = tot.missing ? tot.missing + ' Karte(n) ohne Preis sind nicht enthalten' : '';
   }
+  var openRows = {}; /* aufgeklappte Kartenzeilen, damit sie beim Neuzeichnen offen bleiben */
+  var ovOpen = false;
   function renderCollection() {
     updateSetProgress(); refreshOwnHints();
     renderSelect();
@@ -1235,9 +1394,14 @@ a{color:var(--accent)}
     var col = active();
     var wishMode = curKind === 'wish';
     $('#kindTitle').textContent = wishMode ? 'Wunschliste' : 'Sammlung · ' + col.name;
+    $('#kindTitle').hidden = !wishMode;
     $('#collManage').hidden = wishMode;
+    $('#collActions').hidden = wishMode;
+    $('#ovToggle').hidden = wishMode;
+    $('#vhSpark').hidden = wishMode;
+    $('#ovWrap').hidden = wishMode || !ovOpen;
     renderOverview(wishMode);
-    $('#valLabel').textContent = wishMode ? 'Gesamtpreis der Wunschliste' : 'Geschätzter Wert';
+    $('#valLabel').textContent = wishMode ? 'Gesamtpreis der Wunschliste' : 'Wert · ' + col.name;
     var sum = 0, cards = 0, missing = 0;
     var list = $('#list');
     list.replaceChildren();
@@ -1246,8 +1410,16 @@ a{color:var(--accent)}
       var up = unitPrice(item);
       cards += item.qty;
       if (up) sum += up.value * item.qty; else missing += item.qty;
+      var rk = curKind + '|' + item.key;
 
-      var priceTxt = el('div', { class: 'meta' });
+      /* Kurzzeile: Preis pro Karte; Details mit Stand und Hinweisen stehen im aufgeklappten Bereich */
+      var pl = el('span', { class: 'pl' });
+      if (up) {
+        pl.append(el('span', { class: 'price', text: money(up.value) }), el('span', { class: 'meta', text: up.manual ? ' · eigener Preis' : ' pro Karte' }));
+        if (isStale(item) && !up.manual) pl.append(el('span', { class: 'warnflag', text: ' · veraltet' }));
+      } else pl.append(el('span', { class: 'price none', text: 'Kein Preis, bitte eintragen' }));
+
+      var priceTxt = el('div', { class: 'meta pinfo' });
       if (up) priceTxt.append(money(up.value) + ' pro Karte' + (up.manual ? ' (eigener Preis)' : ''));
       else priceTxt.append(el('span', { class: 'price none', text: 'Kein Preis, bitte eigenen eintragen' }));
       if (!up || !up.manual) {
@@ -1267,14 +1439,6 @@ a{color:var(--accent)}
         save(); renderCollection();
       });
 
-      var info = el('div', { style: 'min-width:0' },
-        el('div', { class: 'cname', text: item.name }),
-        el('div', { class: 'meta' },
-          el('span', { class: 'badge', text: item.lang }),
-          variantOf(item) === 'reverse' ? el('span', { class: 'badge', text: 'Reverse' }) : null,
-          [item.set, item.number ? '#' + item.number : ''].filter(Boolean).join(' · ')),
-        priceTxt);
-
       var varSel = null;
       if (item.rev !== false || variantOf(item) === 'reverse') {
         varSel = el('select', { class: 'vsel', 'aria-label': 'Variante für ' + item.name });
@@ -1283,30 +1447,49 @@ a{color:var(--accent)}
         varSel.addEventListener('change', function () { changeVariant(item, varSel.value); });
       }
 
-      var ctrl = el('div', { class: 'ctrl' },
-        varSel,
+      var main = el('button', { class: 'rowtap', type: 'button', 'aria-expanded': String(!!openRows[rk]) },
+        el('span', { class: 'cname', text: item.name }),
+        el('span', { class: 'meta' },
+          el('span', { class: 'badge', text: item.lang }),
+          variantOf(item) === 'reverse' ? el('span', { class: 'badge', text: 'Reverse' }) : null,
+          [item.set, item.number ? '#' + item.number : ''].filter(Boolean).join(' · ')),
+        pl);
+
+      var side = el('div', { class: 'side' },
+        el('span', { class: 'line', text: up ? money(up.value * item.qty) : '–' }),
         el('div', { class: 'qty' },
           el('button', { type: 'button', 'aria-label': 'Weniger', text: '−', onclick: function () { changeQty(item, -1); } }),
           el('span', { text: item.qty }),
-          el('button', { type: 'button', 'aria-label': 'Mehr', text: '+', onclick: function () { changeQty(item, 1); } })),
+          el('button', { type: 'button', 'aria-label': 'Mehr', text: '+', onclick: function () { changeQty(item, 1); } })));
+
+      var ctrl = el('div', { class: 'ctrl' },
+        priceTxt,
+        varSel,
         manual,
         el('a', { class: 'btn small', href: ebayUrl(item), target: '_blank', rel: 'noopener', text: 'eBay verkauft' }),
         el('a', { class: 'btn small', href: cmUrl(item), target: '_blank', rel: 'noopener', text: 'Cardmarket' }),
-        wishMode ? el('button', { class: 'btn small primary', type: 'button', text: 'In „' + col.name + '“', onclick: function () { moveToCollection(item); } }) : null,
-        el('span', { class: 'line', text: up ? money(up.value * item.qty) : '–' }));
+        wishMode ? el('button', { class: 'btn small primary', type: 'button', text: 'In „' + col.name + '“', onclick: function () { moveToCollection(item); } }) : null);
 
       var thumb = thumbNode({ image: item.image, name: item.name }, item.lang);
       var zoomBtn = el('button', {
         class: 'thumbbtn', type: 'button', 'aria-label': 'Karte vergrößern: ' + item.name,
         onclick: function () { openSaved(shownItems, idx); }
       }, thumb);
-      list.append(el('article', { class: 'item' }, zoomBtn, info, ctrl));
+      var article = el('article', { class: 'item' + (openRows[rk] ? ' open' : '') }, zoomBtn, main, side, ctrl);
+      main.addEventListener('click', function () {
+        var o = !article.classList.contains('open');
+        article.classList.toggle('open', o);
+        main.setAttribute('aria-expanded', String(o));
+        if (o) openRows[rk] = true; else delete openRows[rk];
+      });
+      list.append(article);
     });
     if (!listOf(col).length) {
       list.append(el('div', { class: 'empty', text: wishMode
         ? 'Die Wunschliste ist leer. Suche eine Karte und wähle bei Hinzufügen „Wunschliste“.'
         : 'Diese Sammlung ist leer. Suche eine Karte und tippe auf Hinzufügen.' }));
     }
+    $('#listInfo').textContent = shownItems.length ? shownItems.length + (shownItems.length === 1 ? ' Eintrag' : ' Einträge') : '';
     $('#total').textContent = money(sum);
     $('#cardCount').textContent = String(cards);
     $('#noPrice').textContent = missing ? missing + ' Karte(n) ohne Preis fließen nicht in den Wert ein' : '';
@@ -1771,8 +1954,31 @@ a{color:var(--accent)}
   $('#toastUndo').addEventListener('click', doUndo);
   $('#importFile').addEventListener('change', function (e) { if (e.target.files[0]) importJson(e.target.files[0]); e.target.value = ''; });
 
+  /* Menü „⋯“ und aufklappbare Übersicht */
+  function setMenu(open) {
+    $('#menuPanel').hidden = !open;
+    $('#menuBtn').setAttribute('aria-expanded', String(open));
+  }
+  $('#menuBtn').addEventListener('click', function (e) { e.stopPropagation(); setMenu($('#menuPanel').hidden); });
+  $('#menuPanel').addEventListener('click', function (e) {
+    var t = e.target;
+    if (t && t.closest && t.closest('button.mitem, label.mitem')) setTimeout(function () { setMenu(false); }, 0);
+  });
+  document.addEventListener('click', function (e) {
+    if (!$('#menuPanel').hidden && !(e.target.closest && e.target.closest('.menu'))) setMenu(false);
+  });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('#menuPanel').hidden) setMenu(false); });
+  $('#ovToggle').addEventListener('click', function () {
+    ovOpen = !ovOpen;
+    $('#ovWrap').hidden = !ovOpen;
+    $('#ovToggle').setAttribute('aria-expanded', String(ovOpen));
+    $('#ovToggle').textContent = ovOpen ? 'Verlauf und Übersicht ausblenden' : 'Verlauf und Übersicht anzeigen';
+  });
+  $('#filterBtn').addEventListener('click', function () { setFilterOpen($('#filterPanel').hidden); });
+
   function showView(v) {
     var s = v === 'search';
+    setMenu(false);
     $('#view-search').hidden = !s;
     $('#view-coll').hidden = s;
     if (!s) {
@@ -1992,7 +2198,7 @@ a{color:var(--accent)}
   $('#setSel').addEventListener('change', function (e) {
     curSet = e.target.value;
     updateSetProgress();
-    if (curSet) showSet();
+    if (curSet) { setFilterOpen(false); showSet(); }
     else if ($('#q').value.trim()) search();
     else { token++; results = []; $('#results').replaceChildren(); $('#moreBtn').hidden = true; setStatus('Wähle ein Set oder gib einen Kartennamen ein.'); }
   });
