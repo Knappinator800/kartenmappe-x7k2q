@@ -232,6 +232,8 @@ input[type=number]{width:130px}
 .lb-noimg{color:var(--lb-ink);opacity:.7}
 .lb-bottom{display:flex;flex-direction:column;gap:6px}
 .lb .meta{color:var(--lb-ink);opacity:.75}
+.lbbuy{display:flex;flex-wrap:wrap;gap:8px}
+.lb .lbbuy .btn{background:rgba(255,255,255,.14);color:var(--lb-ink);border-color:rgba(255,255,255,.3);text-decoration:none}
 .lb .lbartist{color:var(--lb-ink);text-decoration:underline;padding:0;font-size:.82rem;font-weight:500}
 .lb .price.none{color:var(--warn)}
 .lb .btn{background:rgba(255,255,255,.14);color:var(--lb-ink);border-color:rgba(255,255,255,.3)}
@@ -459,6 +461,11 @@ input[type=number]{width:130px}
     <div id="lbMeta" class="meta"></div>
     <button id="lbArtist" class="linkbtn lbartist" type="button" hidden></button>
     <div id="lbPrice" class="price none"></div>
+    <div class="lbbuy" aria-label="Kaufen und Preise vergleichen">
+      <a id="lbCm" class="btn small" target="_blank" rel="noopener">Cardmarket</a>
+      <a id="lbEbayBuy" class="btn small" target="_blank" rel="noopener">eBay Angebote</a>
+      <a id="lbEbaySold" class="btn small" target="_blank" rel="noopener">eBay verkauft</a>
+    </div>
     <div class="choice">
       <select id="lbVar" aria-label="Variante" hidden></select>
       <select id="lbColl" aria-label="Sammlung zum Speichern" hidden></select>
@@ -833,7 +840,7 @@ input[type=number]{width:130px}
     var p = priceFrom(d, 'normal') || priceFrom(d, 'reverse');
     return p ? p.value : null;
   }
-  function numOf(c) { var n = parseInt(String(c.localId || '').replace(/\D/g, ''), 10); return isNaN(n) ? 1e9 : n; }
+  function cardNum(c) { var n = parseInt(String(c.localId || '').replace(/\D/g, ''), 10); return isNaN(n) ? 1e9 : n; }
   function needsDetail() {
     return flt.sort === 'price-desc' || flt.sort === 'price-asc' || num(flt.min) != null || num(flt.max) != null ||
       !!flt.rarity || flt.priced || !!(viewCtx && (viewCtx.artist || viewCtx.force));
@@ -903,7 +910,7 @@ input[type=number]{width:130px}
       });
       var order = list.map(function (b, i) { return { b: b, i: i, p: cardPrice(lang, b.id) }; });
       if (flt.sort === 'name') order.sort(function (a, b) { return String(a.b.name || '').localeCompare(String(b.b.name || ''), undefined, { sensitivity: 'base' }) || a.i - b.i; });
-      else if (flt.sort === 'num') order.sort(function (a, b) { return numOf(a.b) - numOf(b.b) || a.i - b.i; });
+      else if (flt.sort === 'num') order.sort(function (a, b) { return cardNum(a.b) - cardNum(b.b) || a.i - b.i; });
       else if (flt.sort === 'price-desc' || flt.sort === 'price-asc') {
         var dir = flt.sort === 'price-desc' ? -1 : 1;
         order.sort(function (a, b) {
@@ -1497,9 +1504,10 @@ input[type=number]{width:130px}
   }
 
   /* ---------- Sammlung anzeigen ---------- */
-  function ebayUrl(item) {
-    var q = [item.name, item.set, item.number].filter(Boolean).join(' ');
-    return 'https://www.ebay.de/sch/i.html?_nkw=' + encodeURIComponent(q) + '&LH_Sold=1&LH_Complete=1';
+  /* sold = true: verkaufte Artikel (Preisvergleich); sonst aktuelle Angebote, günstigste inklusive Versand zuerst */
+  function ebayUrl(item, sold) {
+    var q = [item.name, item.set, item.number, variantOf(item) === 'reverse' ? 'Reverse Holo' : ''].filter(Boolean).join(' ');
+    return 'https://www.ebay.de/sch/i.html?_nkw=' + encodeURIComponent(q) + (sold === false ? '&_sop=15' : '&LH_Sold=1&LH_Complete=1');
   }
   /* Cardmarket sperrt Direktlinks über die Produkt-Nr. (Cloudflare), daher Suche nach dem Namen ohne Nummer. */
   function cmUrl(item) {
@@ -2261,11 +2269,27 @@ input[type=number]{width:130px}
     img.src = urls[0];
   }
   /* Gespeicherte Karte (Sammlung oder Wunschliste) groß ansehen, ohne Hinzufügen-Knöpfe. */
+  /* Kaufen und vergleichen: Links zu Cardmarket und eBay für die gezeigte Karte */
+  function updateBuyLinks(item) {
+    $('#lbCm').href = cmUrl(item);
+    $('#lbEbayBuy').href = ebayUrl(item, false);
+    $('#lbEbaySold').href = ebayUrl(item, true);
+  }
+  function searchBuyItem() {
+    var base = results[vIndex] || {}, d = vDetail;
+    return {
+      name: (d && d.name) || base.name || '',
+      set: d && d.set && d.set.name || '',
+      number: (d && d.localId) || base.localId || '',
+      variant: vVariant
+    };
+  }
   function showSaved(i) {
     vIndex = i; vDetail = null; vVariant = 'normal';
     setZoom(false);
     $('#lbArtist').hidden = true;
     var item = vSaved[i];
+    updateBuyLinks(item);
     $('#lbImg').alt = item.name || '';
     $('#lbTitle').textContent = item.name || item.id;
     loadViewerImage(item.image, item.lang);
@@ -2306,6 +2330,7 @@ input[type=number]{width:130px}
     $('#lbArtist').hidden = true;
     setZoom(false);
     var base = results[i], lang = state.lang;
+    updateBuyLinks(searchBuyItem());
     $('#lbImg').alt = base.name || '';
     $('#lbTitle').textContent = base.name || base.id;
     loadViewerImage(base.image, lang);
@@ -2319,6 +2344,7 @@ input[type=number]{width:130px}
     getCard(lang, base.id).then(function (card) {
       if (vIndex !== i) return;
       vDetail = card;
+      updateBuyLinks(searchBuyItem());
       if (!base.image) {
         var useImage = function (u) { if (u && vIndex === i) { base.image = u; loadViewerImage(u, lang); } };
         if (card.image) useImage(card.image);
@@ -2375,7 +2401,7 @@ input[type=number]{width:130px}
       vMsgTimer = setTimeout(function () { m.textContent = ''; }, 2000);
     });
   }
-  $('#lbVar').addEventListener('change', function () { vVariant = this.value; showViewerPrice(); });
+  $('#lbVar').addEventListener('change', function () { vVariant = this.value; showViewerPrice(); if (vMode === 'search') updateBuyLinks(searchBuyItem()); });
   $('#lbClose').addEventListener('click', closeViewer);
   $('#lbPrev').addEventListener('click', function () { step(-1); });
   $('#lbNext').addEventListener('click', function () { step(1); });
