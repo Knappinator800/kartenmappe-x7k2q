@@ -70,6 +70,16 @@ input[type=number]{width:130px}
 .langs{display:flex;gap:6px;flex-wrap:wrap}
 .langs button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 12px;font-size:.86rem}
 .langs button[aria-pressed=true]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.seg{display:flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--surface);width:fit-content;max-width:100%}
+.seg button{border:0;background:none;padding:6px 16px;font-size:.86rem}
+.seg button[aria-pressed=true]{background:var(--accent);color:var(--accent-ink);font-weight:600}
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.fgrid label{display:flex;flex-direction:column;gap:4px;font-size:.78rem;color:var(--muted);min-width:0}
+.fgrid input[type=number]{width:100%}
+.fhint{font-size:.78rem;color:var(--muted)}
+.loadbar{display:flex;align-items:center;gap:10px;margin:0 0 10px}
+.loadbar[hidden]{display:none}
+.loadbar .spbar{flex:1}
 .suggest{display:flex;flex-wrap:wrap;gap:6px}
 .suggest[hidden]{display:none}
 .suggest .btn{white-space:normal;text-align:left}
@@ -222,6 +232,7 @@ input[type=number]{width:130px}
 .lb-noimg{color:var(--lb-ink);opacity:.7}
 .lb-bottom{display:flex;flex-direction:column;gap:6px}
 .lb .meta{color:var(--lb-ink);opacity:.75}
+.lb .lbartist{color:var(--lb-ink);text-decoration:underline;padding:0;font-size:.82rem;font-weight:500}
 .lb .price.none{color:var(--warn)}
 .lb .btn{background:rgba(255,255,255,.14);color:var(--lb-ink);border-color:rgba(255,255,255,.3)}
 .lb .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
@@ -249,6 +260,11 @@ input[type=number]{width:130px}
         <button class="btn" id="filterBtn" type="button" aria-expanded="false" aria-controls="filterPanel">Filter</button>
       </form>
       <div id="filterPanel" class="filterpanel" hidden>
+        <div class="flabel">Suchen nach</div>
+        <div class="seg" id="modeSeg" role="group" aria-label="Suchen nach">
+          <button type="button" id="modeName" aria-pressed="true">Kartenname</button>
+          <button type="button" id="modeArtist" aria-pressed="false">Künstler</button>
+        </div>
         <div class="flabel">Sprache der Karten</div>
         <div class="langs" id="langs" role="group" aria-label="Sprache der Karten"></div>
         <div class="flabel">Set</div>
@@ -257,9 +273,29 @@ input[type=number]{width:130px}
           <select id="setSel" class="grow" aria-label="Set auswählen"><option value="">Sets werden geladen …</option></select>
         </div>
         <div id="setSuggest" class="suggest" hidden></div>
+        <div class="flabel">Sortieren und filtern</div>
+        <select id="fltSort" aria-label="Sortierung">
+          <option value="default">Reihenfolge der Suche</option>
+          <option value="name">Name (A bis Z)</option>
+          <option value="num">Kartennummer</option>
+          <option value="price-desc">Preis (hoch zu niedrig)</option>
+          <option value="price-asc">Preis (niedrig zu hoch)</option>
+        </select>
+        <div class="fgrid">
+          <label>Preis ab (€)<input id="fltMin" type="number" min="0" step="0.5" inputmode="decimal" placeholder="z. B. 5"></label>
+          <label>Preis bis (€)<input id="fltMax" type="number" min="0" step="0.5" inputmode="decimal" placeholder="z. B. 50"></label>
+        </div>
+        <select id="fltRarity" aria-label="Seltenheit"><option value="">Alle Seltenheiten</option></select>
+        <label class="swrow"><input type="checkbox" class="switch" id="fltPriced"><span>Nur Karten mit Preis</span></label>
+        <div class="fhint" id="fltHint">Preis, Seltenheit und Künstler innerhalb eines Sets prüfen die Details jeder Karte. Das klappt bis 500 Treffer.</div>
+        <div class="row"><button class="btn small" id="fltReset" type="button">Filter zurücksetzen</button><button class="btn small" id="fltLoad" type="button">Seltenheiten laden</button></div>
       </div>
       <div id="chips" class="chips"></div>
       <div id="status" class="status" role="status" aria-live="polite">Gib einen Kartennamen ein, auch mit Nummer wie „Glurak 4/102“, oder wähle unter „Filter“ ein Set.</div>
+      <div id="ldBar" class="loadbar" hidden>
+        <div class="spbar" role="progressbar" aria-label="Details werden geladen"><span class="spfill" id="ldFill"></span></div>
+        <button class="btn small" id="ldCancel" type="button">Abbrechen</button>
+      </div>
       <div id="setProgress" class="setprog" hidden>
         <div class="spline"><strong id="spText"></strong><span class="sppct" id="spPct"></span></div>
         <div class="spbar" id="spBar" role="progressbar" aria-label="Fortschritt im Set" aria-valuemin="0" aria-valuemax="100"><span class="spfill" id="spFill"></span></div>
@@ -421,6 +457,7 @@ input[type=number]{width:130px}
   </div>
   <div class="lb-bottom">
     <div id="lbMeta" class="meta"></div>
+    <button id="lbArtist" class="linkbtn lbartist" type="button" hidden></button>
     <div id="lbPrice" class="price none"></div>
     <div class="choice">
       <select id="lbVar" aria-label="Variante" hidden></select>
@@ -565,7 +602,7 @@ input[type=number]{width:130px}
   }
 
   /* ---------- API ---------- */
-  var cache = new Map();
+  var cache = new Map(), detailMap = {};
   function getCard(lang, id, fresh) {
     var k = lang + ':' + id;
     if (!fresh && cache.has(k)) return cache.get(k);
@@ -574,7 +611,7 @@ input[type=number]{width:130px}
       return r.json();
     });
     cache.set(k, p);
-    p.catch(function () { cache.delete(k); });
+    p.then(function (c) { detailMap[k] = c; }, function () { cache.delete(k); });
     return p;
   }
   function pool(tasks, limit) {
@@ -719,7 +756,7 @@ input[type=number]{width:130px}
           curSet = ''; $('#setFilter').value = ''; updateSetProgress();
           loadSets();
           if ($('#q').value.trim()) search();
-          else { token++; results = []; $('#results').replaceChildren(); $('#moreBtn').hidden = true; setStatus('Wähle ein Set oder gib einen Kartennamen ein.'); }
+          else clearResults('Wähle ein Set oder gib einen Kartennamen ein.');
         }
       }));
     });
@@ -727,10 +764,29 @@ input[type=number]{width:130px}
 
   /* ---------- Suche ---------- */
   var results = [], shown = 0, token = 0;
+  /* Ansicht: baseList = alle Treffer der Suche, results = nach Sortierung und Filtern angezeigte Karten */
+  var baseList = [], viewCtx = null, artistMode = false;
+  var DETAIL_LIMIT = 500;
+  var flt = { sort: 'default', min: '', max: '', rarity: '', priced: false };
+  var SORT_LABELS = { name: 'Name', num: 'Kartennummer', 'price-desc': 'Preis, hoch zu niedrig', 'price-asc': 'Preis, niedrig zu hoch' };
   function listByName(lang, q) {
     return fetch(API + lang + '/cards?name=' + encodeURIComponent(q))
       .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(function (d) { return Array.isArray(d) ? d : []; });
+  }
+  /* Karten eines Künstlers: erst der Filter der Kartenliste, sonst die Künstler-Seite der API. */
+  function listByArtist(lang, q) {
+    function get(path) {
+      return fetch(API + lang + path).then(function (r) { return r.ok ? r.json() : null; });
+    }
+    function arr(d) {
+      var a = Array.isArray(d) ? d : (d && Array.isArray(d.cards) ? d.cards : []);
+      return a.filter(function (c) { return c && c.id; });
+    }
+    return get('/cards?illustrator=' + encodeURIComponent(q)).then(arr).then(function (list) {
+      if (list.length) return list;
+      return get('/illustrators/' + encodeURIComponent(q)).then(arr).catch(function () { return []; });
+    });
   }
   function isLatin(q) { return /^[\u0000-ɏ\s'.\-]+$/.test(q); }
   /* Für Japanisch, Koreanisch, Chinesisch: deutschen/englischen Namen suchen,
@@ -763,6 +819,109 @@ input[type=number]{width:130px}
       lists.forEach(function (l) { l.forEach(function (c) { if (!seen[c.id]) { seen[c.id] = 1; out.push(c); } }); });
       return out;
     });
+  }
+  function clearResults(msg) {
+    token++; results = []; baseList = []; viewCtx = null; shown = 0;
+    $('#results').replaceChildren(); $('#moreBtn').hidden = true; $('#ldBar').hidden = true;
+    renderFilterChips();
+    if (msg) setStatus(msg);
+  }
+  function num(v) { var n = parseFloat(String(v).replace(',', '.')); return isFinite(n) ? n : null; }
+  function cardPrice(lang, id) {
+    var d = detailMap[lang + ':' + id];
+    if (!d) return null;
+    var p = priceFrom(d, 'normal') || priceFrom(d, 'reverse');
+    return p ? p.value : null;
+  }
+  function numOf(c) { var n = parseInt(String(c.localId || '').replace(/\D/g, ''), 10); return isNaN(n) ? 1e9 : n; }
+  function needsDetail() {
+    return flt.sort === 'price-desc' || flt.sort === 'price-asc' || num(flt.min) != null || num(flt.max) != null ||
+      !!flt.rarity || flt.priced || !!(viewCtx && (viewCtx.artist || viewCtx.force));
+  }
+  /* Neue Trefferliste übernehmen und mit den gewählten Filtern anzeigen. */
+  function present(list, lang, ctx) {
+    baseList = list;
+    viewCtx = { lang: lang, head: ctx.head, artist: ctx.artist || '', force: false };
+    applyView();
+  }
+  function loadDetails(lang, list, t) {
+    var total = list.length, done = 0, fill = $('#ldFill');
+    $('#ldBar').hidden = false; fill.style.width = '0%';
+    function tick() {
+      if (t !== token) return;
+      done++;
+      fill.style.width = Math.round(done / total * 100) + '%';
+      setStatus('Details werden geladen … ' + done + ' von ' + total);
+    }
+    var tasks = list.map(function (b) {
+      return function () {
+        if (t !== token) return Promise.resolve();
+        return getCard(lang, b.id).then(tick, tick);
+      };
+    });
+    return pool(tasks, 6).then(function () { if (t === token) $('#ldBar').hidden = true; });
+  }
+  function refreshRarityOptions() {
+    var sel = $('#fltRarity'), lang = viewCtx ? viewCtx.lang : state.lang, seen = {};
+    baseList.forEach(function (b) { var d = detailMap[lang + ':' + b.id]; if (d && d.rarity) seen[d.rarity] = true; });
+    if (flt.rarity) seen[flt.rarity] = true;
+    var names = Object.keys(seen).sort(function (a, b) { return a.localeCompare(b); });
+    sel.replaceChildren(el('option', { value: '', text: 'Alle Seltenheiten' }));
+    names.forEach(function (n) { sel.append(el('option', { value: n, text: n })); });
+    sel.value = flt.rarity;
+  }
+  function applyView() {
+    var v = viewCtx;
+    if (!v) { renderFilterChips(); return; }
+    var lang = v.lang, t = ++token;
+    $('#results').replaceChildren(); $('#moreBtn').hidden = true; $('#ldBar').hidden = true;
+    shown = 0;
+    renderFilterChips();
+    if (!needsDetail()) { finalize(); return; }
+    if (baseList.length > DETAIL_LIMIT) {
+      results = [];
+      setStatus('Zu viele Treffer (' + baseList.length + ') für Preis-, Seltenheits- oder Künstler-Filter. Das geht bis ' + DETAIL_LIMIT + ' Karten. Grenze die Suche ein, zum Beispiel mit einem Namen oder einem Set, oder setze die Filter zurück.', true);
+      return;
+    }
+    setStatus('Details werden geladen … 0 von ' + baseList.length);
+    loadDetails(lang, baseList, t).then(function () { if (t === token) finalize(); });
+    function finalize() {
+      var list = baseList.slice();
+      var needle = v.artist.toLowerCase();
+      if (needle) list = list.filter(function (b) {
+        var d = detailMap[lang + ':' + b.id];
+        return d && String(d.illustrator || '').toLowerCase().indexOf(needle) >= 0;
+      });
+      if (flt.rarity) list = list.filter(function (b) { var d = detailMap[lang + ':' + b.id]; return d && d.rarity === flt.rarity; });
+      var mn = num(flt.min), mx = num(flt.max);
+      if (flt.priced || mn != null || mx != null) list = list.filter(function (b) {
+        var p = cardPrice(lang, b.id);
+        if (p == null) return false;
+        if (mn != null && p < mn) return false;
+        if (mx != null && p > mx) return false;
+        return true;
+      });
+      var order = list.map(function (b, i) { return { b: b, i: i, p: cardPrice(lang, b.id) }; });
+      if (flt.sort === 'name') order.sort(function (a, b) { return String(a.b.name || '').localeCompare(String(b.b.name || ''), undefined, { sensitivity: 'base' }) || a.i - b.i; });
+      else if (flt.sort === 'num') order.sort(function (a, b) { return numOf(a.b) - numOf(b.b) || a.i - b.i; });
+      else if (flt.sort === 'price-desc' || flt.sort === 'price-asc') {
+        var dir = flt.sort === 'price-desc' ? -1 : 1;
+        order.sort(function (a, b) {
+          if (a.p == null && b.p == null) return a.i - b.i;
+          if (a.p == null) return 1;
+          if (b.p == null) return -1;
+          return (a.p - b.p) * dir || a.i - b.i;
+        });
+      }
+      results = order.map(function (o) { return o.b; });
+      refreshRarityOptions();
+      if (!results.length) {
+        setStatus('Keine Karte passt zu deinen Filtern (' + baseList.length + ' vor dem Filtern).' + (needle ? ' Bei japanischen, koreanischen und chinesischen Karten fehlt die Künstlerangabe oft.' : '') + ' Lockere die Filter oder setze sie zurück.');
+        return;
+      }
+      setStatus((results.length === baseList.length ? v.head(results.length) : results.length + ' von ' + baseList.length + ' Karten passen zu deinen Filtern') + '. Preise werden geladen …');
+      more(lang, t);
+    }
   }
   function setStatus(msg, err) {
     var s = $('#status');
@@ -832,6 +991,41 @@ input[type=number]{width:130px}
           $('#setSel').dispatchEvent(new Event('change'));
         } })));
     }
+    function chip(text, label, clear) {
+      box.append(el('span', { class: 'chip on' },
+        el('span', { text: text }),
+        el('button', { class: 'x', type: 'button', 'aria-label': label, text: '×', onclick: clear })));
+    }
+    if (artistMode) chip('Künstler-Suche', 'Künstler-Suche beenden', function () { setMode('name'); });
+    if (viewCtx && viewCtx.artist) chip('Künstler: ' + viewCtx.artist, 'Künstler-Filter entfernen', function () {
+      viewCtx.artist = ''; $('#q').value = ''; applyView();
+    });
+    if (flt.sort !== 'default') chip('Sortiert: ' + SORT_LABELS[flt.sort], 'Sortierung entfernen', function () { flt.sort = 'default'; fltChanged(); });
+    var mn = num(flt.min), mx = num(flt.max);
+    if (mn != null || mx != null) {
+      var pt = mn != null && mx != null ? 'Preis: ' + money(mn) + ' bis ' + money(mx) : mn != null ? 'Preis ab ' + money(mn) : 'Preis bis ' + money(mx);
+      chip(pt, 'Preisfilter entfernen', function () { flt.min = ''; flt.max = ''; fltChanged(); });
+    }
+    if (flt.rarity) chip(flt.rarity, 'Seltenheitsfilter entfernen', function () { flt.rarity = ''; fltChanged(); });
+    if (flt.priced) chip('Nur mit Preis', 'Filter „Nur mit Preis“ entfernen', function () { flt.priced = false; fltChanged(); });
+  }
+  /* Bedienfelder im Filterbereich mit dem Zustand abgleichen und die Ansicht neu aufbauen */
+  function syncFltUI() {
+    $('#fltSort').value = flt.sort;
+    $('#fltMin').value = flt.min;
+    $('#fltMax').value = flt.max;
+    $('#fltPriced').checked = flt.priced;
+    $('#fltRarity').value = flt.rarity;
+  }
+  function fltChanged() { syncFltUI(); if (viewCtx) applyView(); else renderFilterChips(); }
+  function setMode(m) {
+    artistMode = m === 'artist';
+    $('#modeName').setAttribute('aria-pressed', String(!artistMode));
+    $('#modeArtist').setAttribute('aria-pressed', String(artistMode));
+    var q = $('#q');
+    q.placeholder = artistMode ? 'Künstler, z. B. Mitsuhiro Arita' : 'Kartenname, z. B. Glurak 4/102';
+    q.setAttribute('aria-label', artistMode ? 'Künstler' : 'Kartenname');
+    renderFilterChips();
   }
   function updateSetProgress() {
     renderFilterChips();
@@ -952,9 +1146,12 @@ input[type=number]{width:130px}
     if (nm) { numWanted = parseInt(nm[1], 10); q = raw.replace(nm[0], ' ').replace(/\s+/g, ' ').trim(); }
     return { q: q, numWanted: numWanted };
   }
-  function showSet() {
+  function showSet(keep) {
     var lang = state.lang, id = curSet, t = ++token;
-    var pq = parseQuery($('#q').value.trim());
+    if (!keep) flt.rarity = '';
+    baseList = []; viewCtx = null;
+    var artist = artistMode ? $('#q').value.trim() : '';
+    var pq = artistMode ? { q: '', numWanted: null } : parseQuery($('#q').value.trim());
     PAGE = 48;
     setStatus('Set wird geladen …');
     $('#results').replaceChildren();
@@ -984,8 +1181,10 @@ input[type=number]{width:130px}
         else setStatus(cards.length ? 'In diesem Set passt keine Karte zu deiner Eingabe (' + cards.length + ' Karten im Set).' : 'Für dieses Set liefert die API keine Karten.');
         return;
       }
-      setStatus(list.length + (pq.q || pq.numWanted != null ? ' passende Karten im Set. Preise werden geladen …' : ' Karten im Set. Preise werden geladen …'));
-      more(lang, t);
+      present(list, lang, {
+        artist: artist,
+        head: function (n) { return n + (pq.q || pq.numWanted != null ? ' passende Karten im Set' : ' Karten im Set'); }
+      });
     }).catch(function (e) {
       delete setCardsCache[ck];
       if (t !== token) return;
@@ -999,6 +1198,8 @@ input[type=number]{width:130px}
     PAGE = 24;
     var raw = $('#q').value.trim();
     if (!raw) return;
+    flt.rarity = '';
+    if (artistMode) { searchArtist(raw); return; }
     /* Nummer erkennen: "4", "#4" oder "4/102" neben dem Namen */
     var nm = raw.match(/(?:^|\s)#?(\d{1,3})(?:\s*\/\s*(\d{1,3}))?(?=\s|$)/);
     var numWanted = null, q = raw;
@@ -1013,8 +1214,9 @@ input[type=number]{width:130px}
     var t = ++token;
     var lang = state.lang;
     setStatus('Suche läuft …');
+    baseList = []; viewCtx = null;
     $('#results').replaceChildren();
-    $('#moreBtn').hidden = true;
+    $('#moreBtn').hidden = true; $('#ldBar').hidden = true;
     var viaDex = lang !== 'de' && lang !== 'en' && isLatin(q);
     (viaDex ? listByDex(lang, q) : listByName(lang, q))
       .then(function (data) {
@@ -1032,13 +1234,30 @@ input[type=number]{width:130px}
             : 'Keine Treffer. Der Name muss in der gewählten Sprache geschrieben sein (Deutsch: Glurak, Englisch: Charizard). Bei Japanisch, Koreanisch und Chinesisch kannst du den deutschen oder englischen Namen eingeben.');
           return;
         }
-        setStatus(results.length + ' Treffer' + (viaDex ? ' (über die Pokédex-Nummer gefunden)' : '') + '. Preise werden geladen …');
-        more(lang, t);
+        present(results, lang, { head: function (n) { return n + ' Treffer' + (viaDex ? ' (über die Pokédex-Nummer gefunden)' : ''); } });
       })
       .catch(function (e) {
         if (t !== token) return;
         setStatus('Die Karten-API ist nicht erreichbar (' + e.message + '). Test: Öffne ' + API + lang + '/cards?name=' + encodeURIComponent(q) + ' direkt im Browser. Zeigt diese Seite Daten, blockiert deine Ansicht die Verbindung. Öffne die Datei dann per Doppelklick in Chrome, Firefox oder Edge.', true);
       });
+  }
+  function searchArtist(raw) {
+    var t = ++token, lang = state.lang;
+    setStatus('Künstler-Suche läuft …');
+    baseList = []; viewCtx = null; results = []; shown = 0;
+    $('#results').replaceChildren();
+    $('#moreBtn').hidden = true; $('#ldBar').hidden = true;
+    listByArtist(lang, raw).then(function (list) {
+      if (t !== token) return;
+      if (!list.length) {
+        setStatus('Keine Karten von „' + raw + '“ gefunden. Schreibe den Namen so, wie er auf der Karte steht, zum Beispiel „Mitsuhiro Arita“. Bei japanischen, koreanischen und chinesischen Karten fehlt die Künstlerangabe oft.');
+        return;
+      }
+      present(list, lang, { head: function (n) { return n + ' Karten von „' + raw + '“'; } });
+    }).catch(function (e) {
+      if (t !== token) return;
+      setStatus('Die Künstler-Suche ist fehlgeschlagen (' + e.message + '). Bitte prüfe die Verbindung und versuche es noch einmal.', true);
+    });
   }
   function more(lang, t) {
     var start = shown;
@@ -1056,7 +1275,9 @@ input[type=number]{width:130px}
     });
     refreshOwnHints();
     pool(tasks, 6).then(function () {
-      if (t === token) setStatus(results.length + ' Treffer, ' + shown + ' angezeigt.');
+      if (t !== token) return;
+      refreshRarityOptions();
+      setStatus(results.length === baseList.length ? results.length + ' Treffer, ' + shown + ' angezeigt.' : results.length + ' von ' + baseList.length + ' Karten passen, ' + shown + ' angezeigt.');
     });
   }
   /* Deutsche Bilder fehlen bei manchen Sets; dann das englische Bild derselben Karte zeigen. */
@@ -2043,6 +2264,7 @@ input[type=number]{width:130px}
   function showSaved(i) {
     vIndex = i; vDetail = null; vVariant = 'normal';
     setZoom(false);
+    $('#lbArtist').hidden = true;
     var item = vSaved[i];
     $('#lbImg').alt = item.name || '';
     $('#lbTitle').textContent = item.name || item.id;
@@ -2081,6 +2303,7 @@ input[type=number]{width:130px}
     if (vMode === 'saved') { showSaved(i); return; }
     vIndex = i; vDetail = null; vVariant = 'normal';
     $('#lbVar').hidden = true;
+    $('#lbArtist').hidden = true;
     setZoom(false);
     var base = results[i], lang = state.lang;
     $('#lbImg').alt = base.name || '';
@@ -2103,7 +2326,13 @@ input[type=number]{width:130px}
       }
       var setName = card.set && card.set.name ? card.set.name : '';
       var total = card.set && card.set.cardCount && card.set.cardCount.official;
-      $('#lbMeta').textContent = pos + ' · ' + [setName, '#' + (card.localId || base.localId || '') + (total ? '/' + total : '')].filter(Boolean).join(' · ');
+      $('#lbMeta').textContent = pos + ' · ' + [setName, '#' + (card.localId || base.localId || '') + (total ? '/' + total : ''), card.rarity].filter(Boolean).join(' · ');
+      if (card.illustrator) {
+        var la = $('#lbArtist');
+        la.dataset.artist = card.illustrator;
+        la.textContent = 'Künstler: ' + card.illustrator + ' (alle Karten anzeigen)';
+        la.hidden = false;
+      }
       fillVariants($('#lbVar'), card, vVariant);
       showViewerPrice();
     }).catch(function () {
@@ -2200,7 +2429,7 @@ input[type=number]{width:130px}
     updateSetProgress();
     if (curSet) { setFilterOpen(false); showSet(); }
     else if ($('#q').value.trim()) search();
-    else { token++; results = []; $('#results').replaceChildren(); $('#moreBtn').hidden = true; setStatus('Wähle ein Set oder gib einen Kartennamen ein.'); }
+    else clearResults('Wähle ein Set oder gib einen Kartennamen ein.');
   });
 
   $('#offBtn').addEventListener('click', offDownload);
@@ -2209,6 +2438,40 @@ input[type=number]{width:130px}
     hideOwned = this.checked;
     try { localStorage.setItem(HO_KEY, hideOwned ? '1' : '0'); } catch (e) {}
     if (curSet) showSet();
+  });
+
+  $('#modeName').addEventListener('click', function () { setMode('name'); });
+  $('#modeArtist').addEventListener('click', function () { setMode('artist'); $('#q').focus(); });
+  $('#fltSort').addEventListener('change', function () { flt.sort = this.value; fltChanged(); });
+  $('#fltMin').addEventListener('change', function () { flt.min = this.value.trim(); fltChanged(); });
+  $('#fltMax').addEventListener('change', function () { flt.max = this.value.trim(); fltChanged(); });
+  $('#fltPriced').addEventListener('change', function () { flt.priced = this.checked; fltChanged(); });
+  $('#fltRarity').addEventListener('change', function () { flt.rarity = this.value; fltChanged(); });
+  $('#fltReset').addEventListener('click', function () {
+    flt.sort = 'default'; flt.min = ''; flt.max = ''; flt.rarity = ''; flt.priced = false;
+    if (viewCtx) viewCtx.artist = '';
+    fltChanged();
+  });
+  $('#fltLoad').addEventListener('click', function () {
+    if (!viewCtx || !baseList.length) { setStatus('Starte zuerst eine Suche oder wähle ein Set.'); return; }
+    viewCtx.force = true; applyView();
+  });
+  $('#ldCancel').addEventListener('click', function () {
+    flt.min = ''; flt.max = ''; flt.rarity = ''; flt.priced = false;
+    if (flt.sort.indexOf('price') === 0) flt.sort = 'default';
+    if (viewCtx) { viewCtx.force = false; viewCtx.artist = ''; }
+    fltChanged();
+  });
+  /* In der Kartenansicht auf den Künstler tippen startet die Künstler-Suche */
+  $('#lbArtist').addEventListener('click', function () {
+    var name = this.dataset.artist;
+    if (!name) return;
+    closeViewer();
+    curSet = ''; $('#setSel').value = '';
+    setMode('artist'); $('#q').value = name;
+    setFilterOpen(false);
+    window.scrollTo(0, 0);
+    search();
   });
 
   /* Schnittstelle für die Synchronisation (sync.js) */
