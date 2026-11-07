@@ -232,6 +232,7 @@ input[type=number]{width:130px}
 .lb-noimg{color:var(--lb-ink);opacity:.7}
 .lb-bottom{display:flex;flex-direction:column;gap:6px}
 .lb .meta{color:var(--lb-ink);opacity:.75}
+.item .ctrl .phrow{flex:1 1 100%;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .lbbuy{display:flex;flex-wrap:wrap;gap:8px}
 .lb .lbbuy .btn{background:rgba(255,255,255,.14);color:var(--lb-ink);border-color:rgba(255,255,255,.3);text-decoration:none}
 .lb .lbartist{color:var(--lb-ink);text-decoration:underline;padding:0;font-size:.82rem;font-weight:500}
@@ -444,6 +445,8 @@ input[type=number]{width:130px}
   <button id="toastUndo" type="button">Rückgängig</button>
 </div>
 
+<input id="photoFile" type="file" accept="image/*" hidden>
+
 <div id="lb" class="lb" role="dialog" aria-modal="true" aria-label="Kartenansicht" hidden>
   <div class="lb-top">
     <div id="lbTitle" class="lb-title"></div>
@@ -631,6 +634,103 @@ input[type=number]{width:130px}
     var ws = [];
     for (var n = 0; n < limit; n++) ws.push(worker());
     return Promise.all(ws);
+  }
+
+  /* ---------- Eigene Fotos ---------- */
+  /* Fotos hängen an der Karte (Sprache + Karten-Nr.), nicht an der Sammlung. Sie liegen verkleinert in IndexedDB
+     und werden von sync.js über PokeApp.photos mit dem Konto abgeglichen. */
+  var photoMap = {}, photoRecs = {}, PDB = null, photoTarget = null, photoRenderTimer = null;
+  function photoKey(lang, id) { return lang + ':' + id; }
+  function photoOf(lang, id) { return photoMap[photoKey(lang, id)] || ''; }
+  function pdbOpen() {
+    return new Promise(function (res) {
+      try {
+        var r = indexedDB.open('pokesammlung-photos', 1);
+        r.onupgradeneeded = function () { r.result.createObjectStore('photos', { keyPath: 'key' }); };
+        r.onsuccess = function () { res(r.result); };
+        r.onerror = function () { res(null); };
+      } catch (e) { res(null); }
+    });
+  }
+  function pdbPut(rec) {
+    if (!PDB) return Promise.resolve(false);
+    return new Promise(function (res) {
+      try {
+        var tx = PDB.transaction('photos', 'readwrite');
+        tx.objectStore('photos').put(rec);
+        tx.oncomplete = function () { res(true); };
+        tx.onerror = tx.onabort = function () { res(false); };
+      } catch (e) { res(false); }
+    });
+  }
+  function pdbAll() {
+    if (!PDB) return Promise.resolve([]);
+    return new Promise(function (res) {
+      try {
+        var r = PDB.transaction('photos').objectStore('photos').getAll();
+        r.onsuccess = function () { res(r.result || []); };
+        r.onerror = function () { res([]); };
+      } catch (e) { res([]); }
+    });
+  }
+  var photoReady = pdbOpen().then(function (db) { PDB = db; return pdbAll(); }).then(function (list) {
+    list.forEach(function (r) {
+      if (photoRecs[r.key] && photoRecs[r.key].updatedAt >= r.updatedAt) return;
+      photoRecs[r.key] = r;
+      if (!r.deleted && r.data) photoMap[r.key] = r.data;
+    });
+    if (list.length) photosChanged();
+  });
+  function commitPhoto(rec) {
+    photoRecs[rec.key] = rec;
+    if (rec.deleted || !rec.data) delete photoMap[rec.key]; else photoMap[rec.key] = rec.data;
+    return pdbPut(rec);
+  }
+  /* Ansicht (Sammlung, offene Vergrößerung) kurz gebündelt neu zeichnen */
+  function photosChanged() {
+    clearTimeout(photoRenderTimer);
+    photoRenderTimer = setTimeout(function () {
+      renderCollection();
+      if (!$('#lb').hidden && vMode === 'saved') showSaved(vIndex);
+    }, 60);
+  }
+  function stampFor(key) { return Math.max(Date.now(), ((photoRecs[key] && photoRecs[key].updatedAt) || 0) + 1); }
+  function localPhotoChange(rec) {
+    return photoReady.then(function () { return commitPhoto(rec); }).then(function () {
+      photosChanged();
+      try { if (window.PokeApp && typeof window.PokeApp.onPhoto === 'function') window.PokeApp.onPhoto(); } catch (e) {}
+    });
+  }
+  function savePhoto(key, data) { return localPhotoChange({ key: key, data: data, deleted: false, dirty: true, updatedAt: stampFor(key) }); }
+  function removePhoto(key) { return localPhotoChange({ key: key, data: '', deleted: true, dirty: true, updatedAt: stampFor(key) }); }
+  function viaImg(file) {
+    return new Promise(function (res, rej) {
+      var u = URL.createObjectURL(file), im = new Image();
+      im.onload = function () { URL.revokeObjectURL(u); res(im); };
+      im.onerror = function () { URL.revokeObjectURL(u); rej(new Error('Das Bild konnte nicht gelesen werden.')); };
+      im.src = u;
+    });
+  }
+  /* Foto verkleinern (längste Seite 760 px, JPEG), damit es klein bleibt und synchronisiert werden kann */
+  function resizePhoto(file) {
+    var load = window.createImageBitmap
+      ? createImageBitmap(file, { imageOrientation: 'from-image' }).catch(function () { return viaImg(file); })
+      : viaImg(file);
+    return load.then(function (img) {
+      var w = img.width || img.naturalWidth, h = img.height || img.naturalHeight;
+      var k = Math.min(1, 760 / Math.max(w, h));
+      var cw = Math.max(1, Math.round(w * k)), ch = Math.max(1, Math.round(h * k));
+      var c = document.createElement('canvas'); c.width = cw; c.height = ch;
+      var x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, cw, ch); x.drawImage(img, 0, 0, cw, ch);
+      if (img.close) img.close();
+      var q = 0.8, out = c.toDataURL('image/jpeg', q);
+      while (out.length > 300000 && q > 0.4) { q -= 0.1; out = c.toDataURL('image/jpeg', q); }
+      return out;
+    });
+  }
+  function pickPhoto(item) {
+    photoTarget = item;
+    $('#photoFile').click();
   }
 
   /* ---------- Wunschliste offline ---------- */
@@ -1291,7 +1391,7 @@ input[type=number]{width:130px}
   function enVariant(url) { return String(url).replace('/de/', '/en/'); }
   /* Bildadressen: TCGdex liefert eine Basis (… + /low.webp); fertige Bilddateien bleiben unverändert. */
   function imageUrls(base, lang, sizes) {
-    if (/\.(webp|png|jpe?g|gif)(\?.*)?$/i.test(String(base))) return [base];
+    if (/^data:image\//.test(String(base)) || /\.(webp|png|jpe?g|gif)(\?.*)?$/i.test(String(base))) return [base];
     var urls = sizes.map(function (z) { return base + '/' + z + '.webp'; });
     if (lang === 'de' && enVariant(base) !== base) sizes.forEach(function (z) { urls.push(enVariant(base) + '/' + z + '.webp'); });
     return urls;
@@ -1300,6 +1400,8 @@ input[type=number]{width:130px}
     var t = el('div', { class: 'thumb' });
     function build(imageBase) {
       t.textContent = '';
+      var own = card && card.id ? photoOf(lang, card.id) : '';
+      if (own) imageBase = own;
       if (!imageBase) { t.textContent = 'Kein Bild'; return; }
       var urls = imageUrls(imageBase, lang, ['low']);
       var img = el('img', { alt: (card && card.name) || '', loading: 'lazy' });
@@ -1513,6 +1615,22 @@ input[type=number]{width:130px}
   function cmUrl(item) {
     return 'https://www.cardmarket.com/de/Pokemon/Products/Search?searchString=' + encodeURIComponent(item.name || '');
   }
+  function photoRow(item) {
+    var key = photoKey(item.lang, item.id), has = !!photoMap[key], armed = false, timer = null;
+    var rm = has ? el('button', { class: 'btn small', type: 'button', text: 'Foto entfernen' }) : null;
+    if (rm) rm.addEventListener('click', function () {
+      if (!armed) {
+        armed = true; rm.textContent = 'Wirklich entfernen?';
+        timer = setTimeout(function () { armed = false; rm.textContent = 'Foto entfernen'; }, 4000);
+        return;
+      }
+      clearTimeout(timer);
+      removePhoto(key);
+    });
+    return el('div', { class: 'phrow' },
+      el('button', { class: 'btn small', type: 'button', text: has ? 'Eigenes Foto ändern' : 'Eigenes Foto hinzufügen', onclick: function () { pickPhoto(item); } }),
+      rm);
+  }
   function numOf(item) {
     var m = String(item.number || '').match(/\d+/);
     return m ? parseInt(m[0], 10) : Number.MAX_SAFE_INTEGER;
@@ -1697,9 +1815,10 @@ input[type=number]{width:130px}
         manual,
         el('a', { class: 'btn small', href: ebayUrl(item), target: '_blank', rel: 'noopener', text: 'eBay verkauft' }),
         el('a', { class: 'btn small', href: cmUrl(item), target: '_blank', rel: 'noopener', text: 'Cardmarket' }),
+        photoRow(item),
         wishMode ? el('button', { class: 'btn small primary', type: 'button', text: 'In „' + col.name + '“', onclick: function () { moveToCollection(item); } }) : null);
 
-      var thumb = thumbNode({ image: item.image, name: item.name }, item.lang);
+      var thumb = thumbNode({ id: item.id, image: item.image, name: item.name }, item.lang);
       var zoomBtn = el('button', {
         class: 'thumbbtn', type: 'button', 'aria-label': 'Karte vergrößern: ' + item.name,
         onclick: function () { openSaved(shownItems, idx); }
@@ -2017,7 +2136,13 @@ input[type=number]{width:130px}
     document.body.append(a); a.click(); a.remove();
     setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
   }
-  function exportJson() { download('pokesammlung.json', JSON.stringify(state, null, 2), 'application/json'); }
+  function exportJson() {
+    var out = JSON.parse(JSON.stringify(state)), n = 0;
+    out.photos = {};
+    Object.keys(photoMap).forEach(function (k) { out.photos[k] = photoMap[k]; n++; });
+    if (!n) delete out.photos;
+    download('pokesammlung.json', JSON.stringify(out, null, 2), 'application/json');
+  }
   function exportCsv() {
     var col = active();
     var rows = [['Name', 'Set', 'Nummer', 'Sprache', 'Variante', 'Anzahl', 'Preis pro Karte EUR', 'Quelle']];
@@ -2054,6 +2179,10 @@ input[type=number]{width:130px}
         imp.wish = cleanItems(imp.wish);
         imp.history = cleanHistory(data.history);
         imp.active = data.active;
+        imp.photos = {};
+        if (data.photos && typeof data.photos === 'object') Object.keys(data.photos).forEach(function (k) {
+          if (/^data:image\/(jpeg|png|webp);base64,/.test(String(data.photos[k]))) imp.photos[k] = data.photos[k];
+        });
         pendingImport = imp;
         s.className = 'status'; s.textContent = '';
         showImportBox();
@@ -2118,12 +2247,15 @@ input[type=number]{width:130px}
       mergeInto(state.wish, imp.wish, mode, stats);
       state.history = compactHist(mergeHist(state.history || [], imp.history));
     }
+    var impPhotos = imp.photos || {}, photoN = 0;
+    Object.keys(impPhotos).forEach(function (k) { if (mode === 'replace' || !photoMap[k]) { photoN++; savePhoto(k, impPhotos[k]); } });
     pendingImport = null; $('#importBox').hidden = true;
     save(); renderLangs(); renderCollection();
     s.className = 'status';
     s.textContent = mode === 'replace' ? 'Import abgeschlossen: Daten ersetzt.' :
       'Import abgeschlossen: ' + stats.added + ' neue Karte(n), ' +
-      (mode === 'add' ? stats.raised + ' Stück aufaddiert.' : stats.skipped + ' Stück übersprungen.');
+      (mode === 'add' ? stats.raised + ' Stück aufaddiert.' : stats.skipped + ' Stück übersprungen.') +
+      (photoN ? ' ' + photoN + ' Foto(s) übernommen.' : '');
     offerUndo('Import abgeschlossen', snap);
   }
 
@@ -2292,8 +2424,9 @@ input[type=number]{width:130px}
     updateBuyLinks(item);
     $('#lbImg').alt = item.name || '';
     $('#lbTitle').textContent = item.name || item.id;
-    loadViewerImage(item.image, item.lang);
-    if (!item.image) {
+    var ownPhoto = photoOf(item.lang, item.id);
+    loadViewerImage(ownPhoto || item.image, item.lang);
+    if (!item.image && !ownPhoto) {
       getCard(item.lang, item.id).then(function (c) {
         if (c && c.image && vMode === 'saved' && vIndex === i) { item.image = c.image; loadViewerImage(c.image, item.lang); }
       }).catch(function () {});
@@ -2333,7 +2466,7 @@ input[type=number]{width:130px}
     updateBuyLinks(searchBuyItem());
     $('#lbImg').alt = base.name || '';
     $('#lbTitle').textContent = base.name || base.id;
-    loadViewerImage(base.image, lang);
+    loadViewerImage(photoOf(lang, base.id) || base.image, lang);
     var pos = (i + 1) + ' von ' + results.length;
     $('#lbMeta').textContent = pos + ' · #' + (base.localId || '');
     var pl = $('#lbPrice');
@@ -2346,7 +2479,7 @@ input[type=number]{width:130px}
       vDetail = card;
       updateBuyLinks(searchBuyItem());
       if (!base.image) {
-        var useImage = function (u) { if (u && vIndex === i) { base.image = u; loadViewerImage(u, lang); } };
+        var useImage = function (u) { if (u && vIndex === i) { base.image = u; if (!photoOf(lang, base.id)) loadViewerImage(u, lang); } };
         if (card.image) useImage(card.image);
         else if (lang === 'de') getCard('en', base.id).then(function (c) { useImage(c && c.image); }).catch(function () {});
       }
@@ -2466,6 +2599,21 @@ input[type=number]{width:130px}
     if (curSet) showSet();
   });
 
+  $('#photoFile').addEventListener('change', function (e) {
+    var f = e.target.files && e.target.files[0], it = photoTarget;
+    e.target.value = '';
+    if (!f || !it) return;
+    var st = $('#collStatus');
+    st.className = 'status'; st.textContent = 'Foto wird verarbeitet …';
+    resizePhoto(f).then(function (data) {
+      return savePhoto(photoKey(it.lang, it.id), data);
+    }).then(function () {
+      st.textContent = 'Foto für „' + it.name + '“ gespeichert.';
+      try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (x) {}
+    }).catch(function (err) {
+      st.className = 'status err'; st.textContent = (err && err.message) || 'Das Foto konnte nicht gespeichert werden.';
+    });
+  });
   $('#modeName').addEventListener('click', function () { setMode('name'); });
   $('#modeArtist').addEventListener('click', function () { setMode('artist'); $('#q').focus(); });
   $('#fltSort').addEventListener('change', function () { flt.sort = this.value; fltChanged(); });
@@ -2518,7 +2666,30 @@ input[type=number]{width:130px}
       try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
       renderCollection();
     },
-    onSave: null
+    onSave: null,
+    onPhoto: null,
+    /* Fotos für die Synchronisation (sync.js) */
+    photos: {
+      pending: function () {
+        return photoReady.then(function () {
+          return Object.keys(photoRecs).filter(function (k) { return photoRecs[k].dirty; }).map(function (k) { return photoRecs[k]; });
+        });
+      },
+      clean: function (key, upd) {
+        var r = photoRecs[key];
+        if (r && r.updatedAt === upd) { r.dirty = false; return pdbPut(r); }
+        return Promise.resolve();
+      },
+      applyRemote: function (rec) {
+        return photoReady.then(function () {
+          var cur = photoRecs[rec.key];
+          if (cur && cur.updatedAt >= rec.updatedAt) return false;
+          var gone = rec.deleted || !rec.data;
+          return commitPhoto({ key: rec.key, data: gone ? '' : rec.data, deleted: !!gone, dirty: false, updatedAt: rec.updatedAt })
+            .then(function () { photosChanged(); return true; });
+        });
+      }
+    }
   };
 
   renderLangs();

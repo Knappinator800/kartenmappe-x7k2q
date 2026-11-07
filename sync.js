@@ -16,7 +16,7 @@
   var HIST = '_hist';
   var MAX_BYTES = 900000;
 
-  var auth = null, db = null, user = null, unsubs = [], timer = null, flushing = false;
+  var auth = null, db = null, user = null, unsubs = [], timer = null, flushing = false, ptimer = null, pflushing = false;
   var meta = loadMeta();
   var ui = { phase: configured ? 'loading' : 'off', msg: '', err: false, last: null, email: '', pass: '', cloud: null };
 
@@ -47,12 +47,12 @@
       .map(function (k) { return JSON.stringify(k) + ':' + stable(v[k]); }).join(',') + '}';
   }
   function sig(payload) { return stable(payload); }
-  function freshMeta() { return { uid: null, sig: {}, upd: {}, dirty: {}, del: {} }; }
+  function freshMeta() { return { uid: null, sig: {}, upd: {}, dirty: {}, del: {}, pSince: 0 }; }
   function loadMeta() {
     try {
       var m = JSON.parse(localStorage.getItem(META_KEY));
       if (m && typeof m === 'object') {
-        return { uid: m.uid || null, sig: m.sig || {}, upd: m.upd || {}, dirty: m.dirty || {}, del: m.del || {} };
+        return { uid: m.uid || null, sig: m.sig || {}, upd: m.upd || {}, dirty: m.dirty || {}, del: m.del || {}, pSince: Number(m.pSince) || 0 };
       }
     } catch (e) {}
     return freshMeta();
@@ -72,7 +72,8 @@
     'auth/operation-not-allowed': 'Die Anmeldung per E-Mail ist im Firebase-Projekt noch nicht aktiviert.',
     'permission-denied': 'Zugriff verweigert. Prüfe die Firestore-Regeln.',
     'unavailable': 'Server nicht erreichbar. Es wird später erneut versucht.',
-    'app/too-large': 'Eine Sammlung ist für die Synchronisation zu groß (über 900 KB).'
+    'app/too-large': 'Eine Sammlung ist für die Synchronisation zu groß (über 900 KB).',
+    'app/photo-too-large': 'Ein Foto ist für die Synchronisation zu groß.'
   };
   function niceError(e) {
     var c = (e && e.code) || '';
@@ -395,6 +396,63 @@
     });
   }
 
+  /* ---------- Fotos ---------- */
+  /* Je Foto ein Dokument users/{uid}/photos/{Schlüssel} mit { key, data (JPEG als Text), updatedAt, deleted }.
+     Beim Start werden nur Fotos geladen, die neuer sind als der letzte bekannte Stand (meta.pSince). */
+  function photoRef(key) { return baseRef(user).collection('photos').doc(String(key).replace(/\//g, '_')); }
+  function photoMsg(e) {
+    if (e && e.code === 'permission-denied') return 'Fotos: Zugriff verweigert. In den Firestore-Regeln muss auch der Ordner „photos“ erlaubt sein.';
+    return 'Fotos: ' + niceError(e);
+  }
+  function flushPhotos() {
+    if (!user || !db || meta.uid !== user.uid || pflushing || !App.photos) return Promise.resolve();
+    pflushing = true;
+    var failed = false, u = user;
+    return App.photos.pending().then(function (list) {
+      return Promise.all(list.map(function (r) {
+        var data = r.deleted ? { key: r.key, deleted: true, data: '', updatedAt: r.updatedAt }
+          : { key: r.key, deleted: false, data: r.data, updatedAt: r.updatedAt };
+        if (JSON.stringify(data).length > MAX_BYTES) { var err = new Error('zu groß'); err.code = 'app/photo-too-large'; return Promise.reject(err); }
+        return photoRef(r.key).set(data).then(function () { return App.photos.clean(r.key, r.updatedAt); });
+      }));
+    }).then(function () {
+      if (user === u) { ui.last = new Date(); if (!ui.err) setStatus('', false); }
+    }, function (e) {
+      failed = true; setStatus(photoMsg(e), true);
+    }).then(function () {
+      pflushing = false;
+      /* Wurde währenddessen ein weiteres Foto geändert, noch einmal; nach einem Fehler nicht in Dauerschleife */
+      if (!failed) return App.photos.pending().then(function (l) { if (l.length) schedulePhotos(); });
+    });
+  }
+  function schedulePhotos() { clearTimeout(ptimer); ptimer = setTimeout(flushPhotos, 1200); }
+  function applyPhotoDocs(docs) {
+    var max = meta.pSince || 0;
+    return Promise.all(docs.map(function (v) {
+      var upd = Number(v.updatedAt) || 0;
+      if (upd > max) max = upd;
+      return App.photos.applyRemote({ key: v.key, data: v.data || '', deleted: !!v.deleted, updatedAt: upd });
+    })).then(function (r) {
+      if (max > (meta.pSince || 0)) { meta.pSince = max; saveMeta(); }
+      if (r.some(Boolean)) { ui.last = new Date(); render(); }
+    });
+  }
+  function photoQuery() { return baseRef(user).collection('photos').where('updatedAt', '>', meta.pSince || 0); }
+  function snapDocs(snap) {
+    var out = [];
+    snap.forEach(function (d) { var v = d.data(); if (v && v.key) out.push(v); });
+    return out;
+  }
+  var photoUnsub = null;
+  function listenPhotos() {
+    if (photoUnsub) { try { photoUnsub(); } catch (e) {} photoUnsub = null; }
+    if (!user || !App.photos) return;
+    photoUnsub = photoQuery().onSnapshot(function (snap) {
+      var docs = snapDocs(snap);
+      if (docs.length) applyPhotoDocs(docs);
+    }, function (e) { setStatus(photoMsg(e), true); });
+  }
+
   /* ---------- Änderungen aus der Cloud übernehmen ---------- */
   function applyRemote(entries) {
     var st = clone(App.getState()), any = false;
@@ -447,8 +505,13 @@
     unsubs.push(base.collection('meta').doc('history').onSnapshot(function (s) {
       if (s.exists) applyRemote([{ id: HIST, data: s.data() }]);
     }, onErr));
+    listenPhotos();
+    flushPhotos();
   }
-  function unlisten() { unsubs.forEach(function (f) { try { f(); } catch (e) {} }); unsubs = []; }
+  function unlisten() {
+    unsubs.forEach(function (f) { try { f(); } catch (e) {} }); unsubs = [];
+    if (photoUnsub) { try { photoUnsub(); } catch (e) {} photoUnsub = null; }
+  }
 
   function syncNow() {
     if (!user) return;
@@ -466,13 +529,18 @@
       if (r[2].exists) es.push({ id: HIST, data: r[2].data() });
       applyRemote(es);
       return flush();
+    }).then(function () {
+      if (!App.photos) return null;
+      return photoQuery().get({ source: 'server' }).then(function (snap) { return applyPhotoDocs(snapDocs(snap)); })
+        .then(function () { return flushPhotos(); });
     }).then(function () { ui.last = new Date(); setStatus('Abgleich abgeschlossen.', false); },
       function (e) { setStatus(niceError(e), true); });
   }
 
   /* ---------- Start ---------- */
   App.onSave = changed;
-  window.addEventListener('online', function () { if (user) { changed(); flush(); } });
+  App.onPhoto = schedulePhotos;
+  window.addEventListener('online', function () { if (user) { changed(); flush(); flushPhotos(); } });
   render();
   boot();
 })();
