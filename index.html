@@ -131,9 +131,10 @@ input[type=number]{width:130px}
 #statWrap .sheet>*,#scanWrap .sheet>*{flex:0 0 auto}
 .iconbtn{width:46px;height:46px;padding:0;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
 .iconbtn svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-.sc-live{position:relative;border-radius:12px;overflow:hidden;background:#000}
-.sc-live video{display:block;width:100%;max-height:48vh;object-fit:cover}
-.sc-frame{position:absolute;inset:8% 0;margin:auto;height:84%;aspect-ratio:63/88;max-width:80%;border:2px dashed rgba(255,255,255,.85);border-radius:12px;pointer-events:none}
+.sc-live{position:relative;border-radius:12px;overflow:hidden;background:#000;width:100%;margin:0 auto;aspect-ratio:3/4}
+.sc-live video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+.sc-frame{position:absolute;border:2px dashed rgba(255,255,255,.9);border-radius:10px;pointer-events:none;box-shadow:0 0 0 9999px rgba(0,0,0,.28)}
+.sc-frame.hit{border-color:#5fcf93;border-style:solid}
 .sc-thumb{width:84px;height:auto;max-height:118px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}
 .sc-fields{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .sc-fields .wide{grid-column:1/-1}
@@ -501,21 +502,22 @@ input[type=number]{width:130px}
 <div id="scanWrap" class="sheetwrap" hidden>
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="scanTitle">
     <div class="sthead"><h2 id="scanTitle">Karte scannen</h2><button class="btn small" id="scanClose" type="button">Schließen</button></div>
-    <div class="meta">Karte hochkant und gerade fotografieren, mit gutem Licht und ohne Spiegelung. Am wichtigsten ist die Nummer unten auf der Karte, zum Beispiel 025/165.</div>
+    <div class="meta" id="scIntro"><b>Live-Scan:</b> Karte aufrecht in den Rahmen halten, ruhig und mit gutem Licht, ohne Spiegelung. Die App liest den Kartenrand mehrmals und übernimmt das Ergebnis, sobald zwei Durchgänge übereinstimmen. Alternativ ein Foto aufnehmen.</div>
     <label class="f">Sprache der Karte<select id="scLang"></select></label>
     <div class="row">
-      <button class="btn primary" id="scPhoto" type="button">Foto aufnehmen</button>
+      <button class="btn primary" id="scLiveBtn" type="button">Live-Scan</button>
+      <button class="btn" id="scPhoto" type="button">Foto aufnehmen</button>
       <button class="btn" id="scGallery" type="button">Aus Galerie</button>
-      <button class="btn" id="scLiveBtn" type="button">Live-Kamera</button>
     </div>
+    <div id="scStatus2" class="status" role="status" aria-live="polite"></div>
     <input id="scFile" type="file" accept="image/*" capture="environment" hidden>
     <input id="scFile2" type="file" accept="image/*" hidden>
     <div id="scLive" class="sc-live" hidden>
       <video id="scVideo" playsinline muted autoplay></video>
-      <div class="sc-frame"></div>
+      <div class="sc-frame" id="scFrame"></div>
     </div>
     <div id="scLiveRow" class="row" hidden>
-      <button class="btn primary" id="scShot" type="button">Aufnehmen</button>
+      <button class="btn" id="scShot" type="button">Jetzt auslösen</button>
       <button class="btn" id="scStop" type="button">Kamera aus</button>
     </div>
     <div class="row" id="scThumbRow" hidden><img id="scThumb" class="sc-thumb" alt="Aufgenommenes Foto"></div>
@@ -524,7 +526,6 @@ input[type=number]{width:130px}
       <div id="scCrop" class="sc-crop"><canvas id="scCropCv"></canvas><div id="scBox" class="sc-box" hidden></div></div>
     </div>
     <div class="row" id="scMarkRow" hidden><button class="btn small" id="scMark" type="button">Nummer im Foto markieren</button></div>
-    <div id="scStatus2" class="status" role="status" aria-live="polite"></div>
     <div id="scSum" class="sc-sum" hidden></div>
     <details id="scDbg" class="meta" hidden><summary>Technische Details</summary><pre id="scDbgText" style="white-space:pre-wrap;overflow-wrap:anywhere;margin:6px 0 0;font-size:.72rem"></pre></details>
     <div class="sc-fields">
@@ -1544,9 +1545,9 @@ input[type=number]{width:130px}
       scStatus('');
       var label = (f.name ? f.name + ' · ' : '') + (f.num ? 'Nr. ' + f.num + (f.total ? ' von ' + f.total : '') : '');
       if (list.length) {
-        sum.append(el('div', { text: list.length + (list.length === 1 ? ' Treffer' : ' Treffer') + ' für ' + label }),
-          r0.check ? el('div', { class: 'meta', style: r0.warn ? 'color:var(--warn)' : 'color:var(--ok)', text: r0.check }) : null,
-          el('div', { class: 'row' }, el('button', { class: 'btn primary', type: 'button', text: 'Treffer anzeigen', onclick: scanShow })));
+        sum.append(el('div', { text: list.length + (list.length === 1 ? ' Treffer' : ' Treffer') + ' für ' + label }));
+        if (r0.check) sum.append(el('div', { class: 'meta', style: r0.warn ? 'color:var(--warn)' : 'color:var(--ok)', text: r0.check }));
+        sum.append(el('div', { class: 'row' }, el('button', { class: 'btn primary', type: 'button', text: 'Treffer anzeigen', onclick: scanShow })));
       } else {
         sum.append(el('div', { text: 'Keine passende Karte in der Datenbank gefunden (' + label + '). Prüfe die Zahlen oben oder trage die Karte selbst ein.' }),
           el('div', { class: 'row' }, el('button', { class: 'btn', type: 'button', text: 'Als eigene Karte eintragen', onclick: function () {
@@ -1607,18 +1608,151 @@ input[type=number]{width:130px}
     fileToCanvas(f).then(scanImage, function () { scStatus('Das Foto konnte nicht gelesen werden.', true); });
   }
   function scStop() {
+    live.on = false;
     if (scan.stream) { scan.stream.getTracks().forEach(function (t) { t.stop(); }); scan.stream = null; }
     $('#scVideo').srcObject = null;
     $('#scLive').hidden = true; $('#scLiveRow').hidden = true;
+    $('#scFrame').classList.remove('hit');
+    $('#scIntro').hidden = false;
+  }
+  /* ---- Live-Scan: Karte in den Rahmen halten, mehrere Bilder lesen, bei zwei gleichen Ergebnissen übernehmen ---- */
+  var live = { on: false, votes: {}, cycle: 0, t0: 0 };
+  var LIVE_PASSES = [['b', 'gray', 6, ''], ['c', 'ad2', 11, ''], ['b', 'ad2', 11, ''], ['c', 'gray', 6, ''], ['b', 'ad', 11, ''], ['b', 'inv', 6, ''], ['d', 'ad2', 11, ''], ['c', 'inv', 6, '']];
+  function liveLayout() {
+    var v = $('#scVideo'), vw = v.videoWidth, vh = v.videoHeight;
+    if (!vw || !vh) return null;
+    var gh = Math.min(0.88 * vh, 0.88 * vw * 88 / 63), gw = gh * 63 / 88;
+    var g = { vw: vw, vh: vh, gw: gw, gh: gh, x: (vw - gw) / 2, y: (vh - gh) / 2 };
+    var box = $('#scLive');
+    box.style.aspectRatio = vw + ' / ' + vh;
+    box.style.maxWidth = Math.max(220, Math.round(window.innerHeight * 0.58 * vw / vh)) + 'px';
+    var fr = $('#scFrame');
+    fr.style.width = (gw / vw * 100) + '%'; fr.style.height = (gh / vh * 100) + '%';
+    fr.style.left = (g.x / vw * 100) + '%'; fr.style.top = (g.y / vh * 100) + '%';
+    return g;
+  }
+  function sharpness(cv) {
+    var k = 320 / cv.width, w = 320, h = Math.max(8, Math.round(cv.height * k));
+    var c = document.createElement('canvas'); c.width = w; c.height = h;
+    var g = c.getContext('2d'); g.drawImage(cv, 0, 0, w, h);
+    var d = g.getImageData(0, 0, w, h).data, sum = 0, x, y, o;
+    for (y = 1; y < h; y++) for (x = 1; x < w; x++) {
+      o = (y * w + x) * 4;
+      sum += Math.abs(d[o] - d[o - 4]) + Math.abs(d[o] - d[o - w * 4]);
+    }
+    return sum / (w * h);
+  }
+  function liveGrab(g) {
+    var v = $('#scVideo'), m = 0.04;
+    var x = Math.max(0, g.x - g.gw * m), y = Math.max(0, g.y - g.gh * m), w = Math.min(g.vw - x, g.gw * (1 + 2 * m)), h = Math.min(g.vh - y, g.gh * (1 + 2 * m));
+    var k = Math.min(1, 2600 / h), c = document.createElement('canvas');
+    c.width = Math.round(w * k); c.height = Math.round(h * k);
+    c.getContext('2d').drawImage(v, x, y, w, h, 0, 0, c.width, c.height);
+    return c;
+  }
+  /* drei Bilder kurz hintereinander, das schärfste wird gelesen */
+  function liveFrame(g) {
+    return new Promise(function (res) {
+      var best = null, bs = -1, n = 0;
+      (function step() {
+        var c = liveGrab(g), sc = sharpness(c);
+        if (sc > bs) { bs = sc; best = c; }
+        if (++n < 3 && live.on) setTimeout(step, 110); else res(best);
+      })();
+    });
+  }
+  function onePass(w, cv, zones, spec) {
+    var z = zones[spec[0]];
+    return recognize(w, prepCanvas(cv, z.x, z.y, z.w, z.h, z.tw, spec[1]), spec[2], spec[3]).then(parseScan);
+  }
+  function liveEnd() { live.on = false; scStop(); }
+  function liveCycle() {
+    if (!live.on) return;
+    var run = scan.run;
+    if (Date.now() - live.t0 > 60000) { liveEnd(); scStatus('Die Karte wurde nicht sicher erkannt. Versuche es mit mehr Licht, weniger Spiegelung, oder nimm ein Foto auf und markiere die Nummer.', true); return; }
+    var g = liveLayout();
+    if (!g) { setTimeout(liveCycle, 250); return; }
+    liveFrame(g).then(function (c) {
+      if (!live.on || run !== scan.run) return null;
+      var W = c.width, H = c.height, bx = live.cycle % 2 === 1 ? cardBox(c) : null;
+      /* abwechselnd: fester Rahmen und die im Bild gefundene Karte (falls sie nicht genau im Rahmen liegt) */
+      if (!bx) bx = { x: 0, y: 0, w: W, h: H };
+      function lz(fy, fh, tw) { var y = bx.y + bx.h * fy; return { x: bx.x, y: y, w: bx.w, h: Math.max(8, Math.min(bx.h * fh, H - y)), tw: tw }; }
+      var zones = { b: lz(0.78, 0.22, 2200), c: lz(0.86, 0.14, 2400), d: lz(0.64, 0.36, 2200) };
+      var s1 = LIVE_PASSES[(live.cycle * 2) % LIVE_PASSES.length], s2 = LIVE_PASSES[(live.cycle * 2 + 1) % LIVE_PASSES.length];
+      live.cycle++;
+      return getOcr().then(function (w) {
+        if (!live.on || run !== scan.run) return null;
+        return onePass(w, c, zones, s1).then(function (r1) { return r1.num || !live.on ? r1 : onePass(w, c, zones, s2); });
+      }).then(function (r) {
+        if (!live.on || run !== scan.run || !r) { if (live.on && run === scan.run) setTimeout(liveCycle, 40); return; }
+        if (r.num) {
+          var key = parseInt(r.num, 10) + '/' + r.total, v = live.votes[key] || (live.votes[key] = { n: 0, num: r.num, total: r.total, cv: c });
+          v.n++; v.cv = c;
+          dbg('Live: ' + r.num + '/' + r.total + ' (' + v.n + '×)');
+          if (v.n >= 2) { liveAccept(v); return; }
+          scStatus('Gelesen: ' + r.num + '/' + r.total + ' – ruhig halten, wird bestätigt …');
+        } else {
+          scStatus('Halte die Karte ruhig und aufrecht in den Rahmen … (Durchgang ' + live.cycle + ')');
+        }
+        setTimeout(liveCycle, 40);
+      });
+    }).catch(function (e) {
+      liveEnd(); dbg('Fehler: ' + errMsg(e));
+      scStatus('Die Texterkennung konnte nicht geladen werden (' + errMsg(e) + '). Nutze „Foto aufnehmen“ oder trage die Nummer von Hand ein.', true);
+    });
+  }
+  function liveAccept(v) {
+    var run = ++scan.run, c = v.cv;
+    $('#scFrame').classList.add('hit');
+    live.on = false;
+    var lang = $('#scLang').value, asian = ['ja', 'ko', 'zh-tw', 'zh-cn'].indexOf(lang) >= 0;
+    scan.canvas = c; scan.hp = 0;
+    $('#scThumb').src = c.toDataURL('image/jpeg', 0.6); $('#scThumbRow').hidden = false;
+    $('#scMarkRow').hidden = false; cropSetup();
+    $('#scNum').value = v.num; $('#scTotal').value = v.total; $('#scName').value = '';
+    scStatus('Erkannt: ' + v.num + '/' + v.total + ' – Name wird gelesen …');
+    scan.busy = true;
+    var p = asian ? Promise.resolve() : getOcr().then(function (w) {
+      var tb = cardBox(c) || { x: 0, y: 0, w: c.width, h: c.height };
+      return recognize(w, prepCanvas(c, tb.x, tb.y, tb.w, Math.min(tb.h * 0.18, c.height - tb.y), 1800, 'gray'), 6, '').then(function (t) {
+        var pr = parseScan(t); $('#scName').value = pr.name || ''; scan.hp = pr.hp || 0;
+        dbg('Name/KP: ' + (pr.name || '–') + ' / ' + (pr.hp || '–'));
+      });
+    }).catch(function () {});
+    return p.then(function () {
+      if (run !== scan.run) return;
+      scan.busy = false; scStop();
+      return scanSearch();
+    });
   }
   function scLiveStart() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { scStatus('Die Live-Kamera ist hier nicht verfügbar. Nutze „Foto aufnehmen“.', true); return; }
-    scStatus('');
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false }).then(function (st) {
+    scStop(); scStatus('Kamera wird gestartet …');
+    $('#scSum').hidden = true; $('#scSum').replaceChildren(); $('#scThumbRow').hidden = true; $('#scCropWrap').hidden = true;
+    dbg(null);
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } }, audio: false }).then(function (st) {
       scan.stream = st;
       var v = $('#scVideo'); v.srcObject = st;
-      $('#scLive').hidden = false; $('#scLiveRow').hidden = false;
+      try {
+        var tr = st.getVideoTracks()[0];
+        if (tr && tr.applyConstraints) tr.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(function () {});
+      } catch (e) {}
+      $('#scLive').hidden = false; $('#scLiveRow').hidden = false; $('#scIntro').hidden = true;
+      var started = false;
+      function go() {
+        if (started || !scan.stream) return;
+        if (!v.videoWidth) return;
+        started = true;
+        dbg('Kamera ' + v.videoWidth + '×' + v.videoHeight);
+        liveLayout();
+        live.on = true; live.votes = {}; live.cycle = 0; live.t0 = Date.now(); scan.run++;
+        scStatus('Texterkennung wird vorbereitet …');
+        liveCycle();
+      }
+      v.onloadedmetadata = go; v.onplaying = go;
       var pr = v.play(); if (pr && pr.catch) pr.catch(function () {});
+      setTimeout(go, 600);
     }, function (e) { scStatus('Kein Zugriff auf die Kamera (' + (e && e.name || 'Fehler') + '). Erlaube die Kamera im Browser oder nutze „Foto aufnehmen“.', true); });
   }
   function scShot() {
@@ -1637,6 +1771,7 @@ input[type=number]{width:130px}
     $('#scSum').hidden = true; $('#scSum').replaceChildren(); $('#scThumbRow').hidden = true; scStatus('');
     $('#scCropWrap').hidden = true; $('#scMarkRow').hidden = true; scan.canvas = null;
     $('#scanWrap').hidden = false;
+    getOcr().then(function () { if (/^Texterkennung wird geladen/.test($('#scStatus2').textContent)) scStatus(''); }, function () {});
     setTimeout(function () { $('#scanClose').focus(); }, 30);
   }
   function closeScan() { scan.run++; scan.busy = false; scStop(); $('#scanWrap').hidden = true; }
