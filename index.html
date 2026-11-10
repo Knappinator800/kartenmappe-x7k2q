@@ -233,6 +233,16 @@ input[type=number]{width:130px}
 .lb-bottom{display:flex;flex-direction:column;gap:6px}
 .lb .meta{color:var(--lb-ink);opacity:.75}
 .item .ctrl .phrow{flex:1 1 100%;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.sheetwrap{position:fixed;inset:0;z-index:55;background:rgba(0,0,0,.5);display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--surface);color:var(--ink);width:100%;max-width:560px;max-height:92vh;overflow:auto;border-radius:18px 18px 0 0;padding:16px max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:10px}
+@media(min-width:600px){.sheetwrap{align-items:center}.sheet{border-radius:18px}}
+.sheet h2{margin:0;font-size:1.1rem}
+.sheet label.f{display:flex;flex-direction:column;gap:4px;font-size:.82rem;color:var(--muted);min-width:0}
+.sheet .chiprow{display:flex;flex-wrap:wrap;gap:6px}
+.btn[aria-pressed=true]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.custombox,.linkbanner{display:flex;flex-direction:column;gap:8px;margin:0 0 12px}
+.linkbanner{flex-direction:row;align-items:center;justify-content:space-between;gap:12px}
+.custombox .crow{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid var(--line)}
 .lbbuy{display:flex;flex-wrap:wrap;gap:8px}
 .lb .lbbuy .btn{background:rgba(255,255,255,.14);color:var(--lb-ink);border-color:rgba(255,255,255,.3);text-decoration:none}
 .lb .lbartist{color:var(--lb-ink);text-decoration:underline;padding:0;font-size:.82rem;font-weight:500}
@@ -304,6 +314,7 @@ input[type=number]{width:130px}
         <div class="spbar" id="spBar" role="progressbar" aria-label="Fortschritt im Set" aria-valuemin="0" aria-valuemax="100"><span class="spfill" id="spFill"></span></div>
         <label class="swrow"><input type="checkbox" class="switch" id="spHide"><span>Karten ausblenden, die ich habe <span class="meta" id="spHideN"></span></span></label>
       </div>
+      <div id="customBox" class="panel custombox" hidden></div>
       <div id="results" class="grid"></div>
       <div class="row" style="justify-content:center;margin-top:14px"><button class="btn" id="moreBtn" type="button" hidden>Mehr anzeigen</button></div>
     </section>
@@ -323,6 +334,9 @@ input[type=number]{width:130px}
             <button class="mitem" id="exportCsv" type="button">Export CSV</button>
             <label class="mitem" for="importFile">Import JSON</label>
             <input id="importFile" type="file" accept="application/json,.json" hidden>
+            <div id="customAct">
+              <button class="mitem" id="addCustom" type="button">Eigene Karte hinzufügen</button>
+            </div>
             <div id="collActions">
               <div class="msep"></div>
               <div class="mlabel">Sammlung verwalten</div>
@@ -363,6 +377,11 @@ input[type=number]{width:130px}
           <span class="meta" id="noPrice"></span>
         </div>
         <button class="linkbtn" id="ovToggle" type="button" aria-expanded="false" aria-controls="ovWrap">Verlauf und Übersicht anzeigen</button>
+      </div>
+
+      <div id="linkBanner" class="panel linkbanner" hidden>
+        <span id="linkText"></span>
+        <button class="btn small primary" id="linkBtn" type="button">Jetzt verknüpfen</button>
       </div>
 
       <div id="ovWrap" hidden>
@@ -446,6 +465,41 @@ input[type=number]{width:130px}
 </div>
 
 <input id="photoFile" type="file" accept="image/*" hidden>
+
+<div id="cstWrap" class="sheetwrap" hidden>
+  <form id="cstForm" class="sheet" role="dialog" aria-modal="true" aria-labelledby="cstTitle" novalidate>
+    <h2 id="cstTitle">Eigene Karte hinzufügen</h2>
+    <div class="meta">Für Karten, die die Datenbank noch nicht kennt. Sie kommt in die Sammlung „<span id="cstColName"></span>“.</div>
+    <label class="f">Sprache der Karte<select id="cstLang"></select></label>
+    <label class="f">Set
+      <input id="cstSetFilter" type="search" placeholder="Sets filtern, zum Beispiel 151 oder Obsidian" autocomplete="off">
+      <select id="cstSet"></select>
+    </label>
+    <label class="f" id="cstSetFreeRow" hidden>Name des Sets<input id="cstSetFree" type="text" maxlength="80" autocomplete="off"></label>
+    <label class="f">Kartennummer<input id="cstNum" type="text" maxlength="12" placeholder="zum Beispiel 025 oder 25/78" autocomplete="off"></label>
+    <label class="f">Name der Karte<input id="cstName" type="text" maxlength="60" placeholder="Pokémon-Name, zum Beispiel Pikachu oder Glurak" autocomplete="off"></label>
+    <div id="cstSug" class="chiprow" hidden></div>
+    <div id="cstSuffixRow" hidden>
+      <div class="meta">Zusatz auf der Karte</div>
+      <div id="cstSuffix" class="chiprow" role="group" aria-label="Zusatz auf der Karte"></div>
+    </div>
+    <div id="cstPick" class="meta" aria-live="polite" hidden></div>
+    <div class="fgrid">
+      <label class="f">Menge<input id="cstQty" type="number" min="1" value="1" inputmode="numeric"></label>
+      <label class="f">Preis in € (optional)<input id="cstPrice" type="number" min="0" step="0.01" inputmode="decimal"></label>
+    </div>
+    <div class="row">
+      <button type="button" class="btn small" id="cstPhotoBtn">Foto hinzufügen</button>
+      <span id="cstPhotoInfo" class="meta"></span>
+    </div>
+    <input id="cstPhotoFile" type="file" accept="image/*" hidden>
+    <div id="cstMsg" class="status" role="status" aria-live="polite"></div>
+    <div class="row">
+      <button class="btn primary" type="submit">Hinzufügen</button>
+      <button class="btn" type="button" id="cstCancel">Abbrechen</button>
+    </div>
+  </form>
+</div>
 
 <div id="lb" class="lb" role="dialog" aria-modal="true" aria-label="Kartenansicht" hidden>
   <div class="lb-top">
@@ -731,6 +785,262 @@ input[type=number]{width:130px}
   function pickPhoto(item) {
     photoTarget = item;
     $('#photoFile').click();
+  }
+
+  /* ---------- Eigene Karten (nicht in der Datenbank) ---------- */
+  /* Gespeichert wie normale Einträge, mit custom: true. Die Kennung ist 'custom-<Set>-<Nummer>', damit dieselbe Karte nicht doppelt
+     angelegt wird. Sobald die Datenbank das Set liefert, lässt sich der Eintrag mit der echten Karte verknüpfen. */
+  var DEX = null, cst = { dex: null, suffix: '', photo: '', sets: [], setLang: '' };
+  var DEX_COL = { de: 1, en: 2, ko: 3, 'zh-tw': 4, 'zh-cn': 5, ja: 6 };
+  var SUFFIXES = ['ex', 'EX', 'GX', 'V', 'VMAX', 'VSTAR'];
+  function dexData() {
+    if (!DEX) {
+      try { DEX = JSON.parse(document.getElementById('dexData').textContent).map(function (r) { r.key = norm(r.slice(1).join('|')); return r; }); }
+      catch (e) { DEX = []; }
+    }
+    return DEX;
+  }
+  function norm(t) { return String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+  function customInSet(lang, setId) {
+    var out = [];
+    state.collections.forEach(function (c) {
+      (c.items || []).forEach(function (i) { if (i.custom && i.lang === lang && i.setId === setId && i.qty > 0) out.push(i); });
+    });
+    return out;
+  }
+  function cstJoin(lang, base, suffix) { return suffix ? base + (['ja', 'ko', 'zh-tw', 'zh-cn'].indexOf(lang) >= 0 ? '' : ' ') + suffix : base; }
+  /* Name auf der Karte, deutscher Name zum Lesen und englischer Name für die Suche */
+  function cstNames() {
+    var lang = $('#cstLang').value, typed = $('#cstName').value.trim(), d = cst.dex, sfx = cst.suffix;
+    if (!d) return { name: typed, alt: '', en: lang === 'en' || lang === 'de' ? typed : '' };
+    var name = cstJoin(lang, d[DEX_COL[lang]], sfx);
+    var de = cstJoin('de', d[1], sfx), en = cstJoin('en', d[2], sfx);
+    return { name: name, alt: lang === 'de' ? '' : de, en: en };
+  }
+  function cstPreview() {
+    var pk = $('#cstPick'), n = cstNames();
+    if (!cst.dex) { pk.hidden = true; $('#cstSuffixRow').hidden = true; return; }
+    $('#cstSuffixRow').hidden = false;
+    pk.hidden = false;
+    pk.textContent = 'Name auf der Karte: ' + n.name + (n.alt ? ' · Deutsch: ' + n.alt : '');
+  }
+  function cstSuggest() {
+    var box = $('#cstSug'), q = norm($('#cstName').value.trim());
+    box.replaceChildren();
+    if (cst.dex || q.length < 2) { box.hidden = true; return; }
+    var lang = $('#cstLang').value, col = DEX_COL[lang];
+    var hits = dexData().filter(function (r) { return r.key.indexOf(q) >= 0; });
+    hits.sort(function (a, b) {
+      var sa = norm(a[1]).indexOf(q) === 0 || norm(a[2]).indexOf(q) === 0 ? 0 : 1, sb = norm(b[1]).indexOf(q) === 0 || norm(b[2]).indexOf(q) === 0 ? 0 : 1;
+      return sa - sb || a[0] - b[0];
+    });
+    hits.slice(0, 8).forEach(function (r) {
+      var label = r[1] + (lang !== 'de' && r[col] !== r[1] ? ' · ' + r[col] : '');
+      box.append(el('button', { class: 'btn small', type: 'button', text: label, onclick: function () {
+        cst.dex = r; $('#cstName').value = r[1]; box.hidden = true; cstSuffixes(); cstPreview();
+      } }));
+    });
+    box.hidden = !hits.length;
+  }
+  function cstSuffixes() {
+    var box = $('#cstSuffix');
+    box.replaceChildren();
+    [''].concat(SUFFIXES).forEach(function (sx) {
+      box.append(el('button', { class: 'btn small', type: 'button', 'aria-pressed': String(cst.suffix === sx), text: sx || 'ohne', onclick: function () {
+        cst.suffix = sx; cstSuffixes(); cstPreview();
+      } }));
+    });
+  }
+  function cstLoadSets(lang) {
+    var sel = $('#cstSet');
+    cst.setLang = lang;
+    sel.replaceChildren(el('option', { value: '', text: 'Sets werden geladen …' }));
+    var asian = ['ja', 'ko', 'zh-tw', 'zh-cn'].indexOf(lang) >= 0;
+    var jobs = [fetchSets(lang)];
+    if (asian) { jobs.push(fetchSets('de').catch(function () { return []; })); jobs.push(fetchSets('en').catch(function () { return []; })); }
+    return Promise.all(jobs).then(function (r) {
+      var list = r[0];
+      if (asian) {
+        var map = {};
+        r[2].forEach(function (x) { map[String(x.id).toLowerCase()] = x.name; });
+        r[1].forEach(function (x) { map[String(x.id).toLowerCase()] = x.name; });
+        list.forEach(function (x) { x._alt = map[String(x.id).toLowerCase()] || ''; });
+      }
+      if (cst.setLang !== lang) return;
+      cst.sets = list; cstRenderSets();
+    }).catch(function () {
+      delete setsCache[lang];
+      if (cst.setLang !== lang) return;
+      cst.sets = []; cstRenderSets();
+    });
+  }
+  function cstRenderSets(want) {
+    var sel = $('#cstSet'), f = $('#cstSetFilter').value.trim().toLowerCase(), lang = $('#cstLang').value;
+    var keep = want != null ? want : sel.value;
+    sel.replaceChildren(el('option', { value: '', text: cst.sets.length ? '– Set auswählen –' : 'Keine Sets geladen' }));
+    cst.sets.forEach(function (x) {
+      var label = setLabel(x, lang);
+      if (f && label.toLowerCase().indexOf(f) < 0 && String(x.id).toLowerCase().indexOf(f) < 0) return;
+      sel.append(el('option', { value: x.id, text: label }));
+    });
+    sel.append(el('option', { value: '__free', text: '– Set steht nicht in der Liste –' }));
+    if (keep && Array.prototype.some.call(sel.options, function (o) { return o.value === keep; })) sel.value = keep;
+    $('#cstSetFreeRow').hidden = sel.value !== '__free';
+  }
+  function openCustom(preset) {
+    preset = preset || {};
+    var col = active();
+    $('#cstColName').textContent = col.name;
+    var lang = preset.lang || state.lang;
+    var ls = $('#cstLang');
+    ls.replaceChildren();
+    LANGS.forEach(function (l) { ls.append(el('option', { value: l[0], text: l[1] })); });
+    ls.value = lang;
+    cst.dex = null; cst.suffix = ''; cst.photo = '';
+    ['#cstSetFilter', '#cstSetFree', '#cstNum', '#cstName', '#cstPrice'].forEach(function (id) { $(id).value = ''; });
+    $('#cstQty').value = '1';
+    $('#cstPhotoInfo').textContent = ''; $('#cstMsg').textContent = ''; $('#cstMsg').className = 'status';
+    $('#cstSug').hidden = true; cstSuffixes(); cstPreview();
+    cstLoadSets(lang).then(function () { if (preset.setId) cstRenderSets(preset.setId); });
+    $('#cstWrap').hidden = false;
+    setTimeout(function () { $('#cstSetFilter').focus(); }, 30);
+  }
+  function closeCustom() { $('#cstWrap').hidden = true; }
+  function cstSubmit() {
+    var msg = $('#cstMsg'), lang = $('#cstLang').value, sv = $('#cstSet').value;
+    function bad(t) { msg.className = 'status err'; msg.textContent = t; }
+    var setObj = sv && sv !== '__free' ? cst.sets.find(function (x) { return x.id === sv; }) : null;
+    var setName = setObj ? (setObj.name || setObj.id) : (sv === '__free' ? $('#cstSetFree').value.trim() : '');
+    if (!setName) { bad('Bitte wähle ein Set aus oder gib den Set-Namen ein.'); return; }
+    var numRaw = $('#cstNum').value.trim();
+    if (!numRaw) { bad('Bitte trage die Kartennummer ein.'); return; }
+    var n = cstNames();
+    if (!n.name) { bad('Bitte gib den Namen der Karte ein.'); return; }
+    var qty = Math.max(1, Math.floor(Number($('#cstQty').value) || 1));
+    var pv = parseFloat($('#cstPrice').value.replace(',', '.'));
+    var price = isFinite(pv) && pv >= 0 ? pv : null;
+    var num = numRaw.split('/')[0].trim();
+    var total = setObj && setObj.cardCount && (setObj.cardCount.official || setObj.cardCount.total);
+    var setKey = setObj ? setObj.id : 'x' + norm(setName).replace(/[^a-z0-9]+/g, '');
+    var numKey = /^\d+$/.test(num) ? String(parseInt(num, 10)) : num;
+    var id = ('custom-' + setKey + '-' + numKey).toLowerCase().replace(/[^a-z0-9._-]+/g, '_');
+    var col = active(), list = listOf(col, 'items');
+    var key = itemKey(lang, id, 'normal');
+    var ex = list.find(function (i) { return i.key === key; });
+    if (ex) {
+      ex.qty += qty;
+      if (price != null) ex.manual = price;
+    } else {
+      list.push({
+        key: key, id: id, lang: lang, name: n.name, alt: n.alt || undefined, en: n.en || undefined,
+        set: setName, setId: setObj ? setObj.id : '', num: num, number: num + (total && /^\d+$/.test(num) ? '/' + total : ''),
+        image: '', qty: qty, variant: 'normal', rev: false, base: 'Normal', price: null, manual: price, added: Date.now(), custom: true
+      });
+    }
+    var done = function () {
+      save(); renderCollection(); closeCustom(); scanLinkable();
+      showToast('„' + n.name + '“ eingetragen.', false);
+    };
+    if (cst.photo) savePhoto(photoKey(lang, id), cst.photo).then(done, done); else done();
+  }
+  /* Verknüpfen: gibt es zu einem eigenen Eintrag jetzt die echte Karte (gleiches Set, gleiche Nummer)? */
+  var linkInfo = {}, linking = false;
+  function matchCard(item, cards) {
+    var want = String(item.num || '').toLowerCase(), wn = /^\d+$/.test(want) ? parseInt(want, 10) : null;
+    return cards.find(function (c) {
+      var lid = String(c.localId || '').toLowerCase();
+      return lid === want || (wn != null && /^\d+$/.test(lid) && parseInt(lid, 10) === wn);
+    }) || null;
+  }
+  function scanLinkable() {
+    var groups = {};
+    state.collections.forEach(function (c) {
+      (c.items || []).forEach(function (i) { if (i.custom && i.setId) groups[i.lang + '|' + i.setId] = [i.lang, i.setId]; });
+    });
+    var keys = Object.keys(groups);
+    if (!keys.length) { linkInfo = {}; renderLinkBanner(); return; }
+    Promise.all(keys.map(function (k) {
+      return fetchSetCards(groups[k][0], groups[k][1]).then(function (cards) { return { g: groups[k], cards: cards }; })
+        .catch(function () { delete setCardsCache[groups[k][0] + ':' + groups[k][1]]; return null; });
+    })).then(function (res) {
+      var info = {};
+      res.forEach(function (r) {
+        if (!r || !r.cards.length) return;
+        state.collections.forEach(function (c) {
+          (c.items || []).forEach(function (i) {
+            if (i.custom && i.lang === r.g[0] && i.setId === r.g[1]) { var m = matchCard(i, r.cards); if (m) info[i.key] = m; }
+          });
+        });
+      });
+      linkInfo = info; renderLinkBanner();
+    });
+  }
+  function renderLinkBanner() {
+    var n = Object.keys(linkInfo).length;
+    $('#linkBanner').hidden = !n;
+    if (n) $('#linkText').textContent = n === 1 ? 'Einen deiner eigenen Einträge gibt es jetzt in der Datenbank.' : n + ' deiner eigenen Einträge gibt es jetzt in der Datenbank.';
+  }
+  function linkAll() {
+    if (linking) return;
+    var jobs = [];
+    state.collections.forEach(function (c) {
+      (c.items || []).forEach(function (i) { if (i.custom && linkInfo[i.key]) jobs.push({ col: c, item: i, card: linkInfo[i.key] }); });
+    });
+    if (!jobs.length) return;
+    linking = true;
+    $('#linkBtn').disabled = true;
+    Promise.all(jobs.map(function (j) {
+      return getCard(j.item.lang, j.card.id).catch(function () { return null; }).then(function (full) { j.full = full; });
+    })).then(function () {
+      jobs.forEach(function (j) {
+        var it = j.item, card = j.full || j.card, lang = it.lang;
+        var total = card.set && card.set.cardCount && card.set.cardCount.official;
+        var key = itemKey(lang, j.card.id, 'normal');
+        var list = j.col.items, other = list.find(function (x) { return x !== it && x.key === key; });
+        var oldPhoto = photoMap[photoKey(lang, it.id)];
+        if (other) {
+          other.qty += it.qty;
+          if (typeof it.manual === 'number' && typeof other.manual !== 'number') other.manual = it.manual;
+        } else {
+          list.push({
+            key: key, id: j.card.id, lang: lang, name: card.name || j.card.name || j.card.id,
+            set: card.set && card.set.name ? card.set.name : it.set,
+            number: (card.localId || j.card.localId || '') + (total ? '/' + total : ''),
+            image: card.image || j.card.image || '', qty: it.qty, variant: 'normal', rev: hasReverse(card), base: baseLabel(card),
+            price: priceFrom(card, 'normal'), manual: typeof it.manual === 'number' ? it.manual : null, added: it.added || Date.now()
+          });
+        }
+        j.col.items = j.col.items.filter(function (x) { return x !== it; });
+        if (oldPhoto) {
+          if (!photoMap[photoKey(lang, j.card.id)]) savePhoto(photoKey(lang, j.card.id), oldPhoto);
+          removePhoto(photoKey(lang, it.id));
+        }
+      });
+      linking = false; $('#linkBtn').disabled = false;
+      linkInfo = {};
+      save(); renderCollection(); renderLinkBanner(); scanLinkable();
+      showToast(jobs.length === 1 ? 'Eintrag verknüpft.' : jobs.length + ' Einträge verknüpft.', false);
+    });
+  }
+  /* Im Set: Hinweis und eigene Einträge, wenn die Datenbank zum Set keine Karten hat */
+  function renderCustomBox() {
+    var box = $('#customBox');
+    if (!curSet) { box.hidden = true; return; }
+    var lang = state.lang, mine = customInSet(lang, curSet);
+    var empty = !!curSetCards && curSetKey === lang + ':' + curSet && !curSetCards.length;
+    if (!empty && !mine.length) { box.hidden = true; return; }
+    box.replaceChildren();
+    if (empty) box.append(el('div', { class: 'meta', text: 'Die Datenbank liefert für dieses Set noch keine Karten. Du kannst deine Karten selbst eintragen.' }));
+    if (mine.length) {
+      box.append(el('div', { class: 'cname', text: 'Deine eigenen Einträge in diesem Set (' + mine.length + ')' }));
+      mine.slice().sort(function (a, b) { return (parseInt(a.num, 10) || 0) - (parseInt(b.num, 10) || 0); }).forEach(function (i) {
+        box.append(el('div', { class: 'crow' },
+          el('span', { text: '#' + (i.num || i.number) + ' · ' + (i.alt || i.name) + (i.alt ? ' (' + i.name + ')' : '') }),
+          el('span', { class: 'meta', text: i.qty + '×' })));
+      });
+    }
+    box.append(el('div', { class: 'row' }, el('button', { class: 'btn small primary', type: 'button', text: 'Eigene Karte eintragen', onclick: function () { openCustom({ lang: lang, setId: curSet }); } })));
+    box.hidden = false;
   }
 
   /* ---------- Wunschliste offline ---------- */
@@ -1134,9 +1444,28 @@ input[type=number]{width:130px}
     q.setAttribute('aria-label', artistMode ? 'Künstler' : 'Kartenname');
     renderFilterChips();
   }
-  function updateSetProgress() {
+  function updateSetProgress() { updateSetProgress0(); renderCustomBox(); }
+  function updateSetProgress0() {
     renderFilterChips();
+    $('#setProgress .swrow').hidden = false;
     var box = $('#setProgress');
+    if (curSet && curSetCards && !curSetCards.length && curSetKey === state.lang + ':' + curSet) {
+      /* Die Datenbank hat zu diesem Set keine Karten: Fortschritt aus den eigenen Einträgen */
+      var mine = customInSet(state.lang, curSet);
+      if (!mine.length) { box.hidden = true; return; }
+      var seen = {};
+      mine.forEach(function (i) { seen[String(i.num || i.number).toLowerCase()] = true; });
+      var have0 = Object.keys(seen).length, so = allSets.find(function (x) { return x.id === curSet; });
+      var tot0 = so && so.cardCount && (so.cardCount.total || so.cardCount.official) || 0;
+      var pct0 = tot0 ? Math.min(have0 >= tot0 ? 100 : 99, Math.max(1, Math.round(have0 / tot0 * 100))) : 0;
+      $('#spText').textContent = tot0 ? have0 + ' von ' + tot0 + ' Karten (eigene Einträge)' : have0 + ' Karten (eigene Einträge)';
+      $('#spPct').textContent = tot0 ? pct0 + ' %' : '';
+      $('#spFill').style.width = pct0 + '%';
+      $('#spBar').setAttribute('aria-valuenow', String(pct0));
+      $('#setProgress .swrow').hidden = true;
+      box.hidden = false;
+      return;
+    }
     if (!curSet || !curSetCards || !curSetCards.length || curSetKey !== state.lang + ':' + curSet) { box.hidden = true; return; }
     var om = ownedMap(state.lang), have = 0, total = curSetCards.length;
     curSetCards.forEach(function (c) { if (om[c.id]) have++; });
@@ -1160,9 +1489,9 @@ input[type=number]{width:130px}
     }
     return p;
   }
-  function setLabel(s) {
+  function setLabel(s, lang) {
     var name = s.name || s.id;
-    var asian = ['ja', 'ko', 'zh-tw', 'zh-cn'].indexOf(state.lang) >= 0;
+    var asian = ['ja', 'ko', 'zh-tw', 'zh-cn'].indexOf(lang || state.lang) >= 0;
     if (asian) {
       if (s._alt && s._alt !== name) return s._alt + ' (' + name + ')';
       return s.id + ' (' + name + ')';
@@ -1253,6 +1582,12 @@ input[type=number]{width:130px}
     if (nm) { numWanted = parseInt(nm[1], 10); q = raw.replace(nm[0], ' ').replace(/\s+/g, ' ').trim(); }
     return { q: q, numWanted: numWanted };
   }
+  function fetchSetCards(lang, id) {
+    var ck = lang + ':' + id;
+    return setCardsCache[ck] || (setCardsCache[ck] = fetch(API + lang + '/sets/' + encodeURIComponent(id))
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (s) { return Array.isArray(s.cards) ? s.cards : []; }));
+  }
   function showSet(keep) {
     var lang = state.lang, id = curSet, t = ++token;
     if (!keep) flt.rarity = '';
@@ -1265,9 +1600,7 @@ input[type=number]{width:130px}
     $('#moreBtn').hidden = true;
     curSetCards = null; updateSetProgress();
     var ck = lang + ':' + id;
-    var p = setCardsCache[ck] || (setCardsCache[ck] = fetch(API + lang + '/sets/' + encodeURIComponent(id))
-      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-      .then(function (s) { return Array.isArray(s.cards) ? s.cards : []; }));
+    var p = fetchSetCards(lang, id);
     p.then(function (cards) {
       if (t !== token) return;
       curSetCards = cards; curSetKey = lang + ':' + id;
@@ -1608,12 +1941,12 @@ input[type=number]{width:130px}
   /* ---------- Sammlung anzeigen ---------- */
   /* sold = true: verkaufte Artikel (Preisvergleich); sonst aktuelle Angebote, günstigste inklusive Versand zuerst */
   function ebayUrl(item, sold) {
-    var q = [item.name, item.set, item.number, variantOf(item) === 'reverse' ? 'Reverse Holo' : ''].filter(Boolean).join(' ');
+    var q = [item.en || item.alt || item.name, item.set, item.number, variantOf(item) === 'reverse' ? 'Reverse Holo' : ''].filter(Boolean).join(' ');
     return 'https://www.ebay.de/sch/i.html?_nkw=' + encodeURIComponent(q) + (sold === false ? '&_sop=15' : '&LH_Sold=1&LH_Complete=1');
   }
   /* Cardmarket sperrt Direktlinks über die Produkt-Nr. (Cloudflare), daher Suche nach dem Namen ohne Nummer. */
   function cmUrl(item) {
-    return 'https://www.cardmarket.com/de/Pokemon/Products/Search?searchString=' + encodeURIComponent(item.name || '');
+    return 'https://www.cardmarket.com/de/Pokemon/Products/Search?searchString=' + encodeURIComponent(item.en || item.alt || item.name || '');
   }
   function photoRow(item) {
     var key = photoKey(item.lang, item.id), has = !!photoMap[key], armed = false, timer = null;
@@ -1638,7 +1971,7 @@ input[type=number]{width:130px}
   function sortItems(items) {
     var mode = state.sort || 'name';
     var arr = items.slice();
-    function byName(a, b) { return a.name.localeCompare(b.name, 'de'); }
+    function byName(a, b) { return (a.alt || a.name).localeCompare(b.alt || b.name, 'de'); }
     function val(i) { var u = unitPrice(i); return u ? u.value : null; }
     function cmpPrice(a, b, dir, mult) {
       var x = val(a), y = val(b);
@@ -1744,6 +2077,7 @@ input[type=number]{width:130px}
     $('#kindTitle').hidden = !wishMode;
     $('#collManage').hidden = wishMode;
     $('#collActions').hidden = wishMode;
+    $('#customAct').hidden = wishMode;
     $('#ovToggle').hidden = wishMode;
     $('#vhSpark').hidden = wishMode;
     $('#ovWrap').hidden = wishMode || !ovOpen;
@@ -1799,7 +2133,8 @@ input[type=number]{width:130px}
         el('span', { class: 'meta' },
           el('span', { class: 'badge', text: item.lang }),
           variantOf(item) === 'reverse' ? el('span', { class: 'badge', text: 'Reverse' }) : null,
-          [item.set, item.number ? '#' + item.number : ''].filter(Boolean).join(' · ')),
+          item.custom ? el('span', { class: 'badge', text: 'Eigen' }) : null,
+          [item.alt, item.set, item.number ? '#' + item.number : ''].filter(Boolean).join(' · ')),
         pl);
 
       var side = el('div', { class: 'side' },
@@ -1903,6 +2238,7 @@ input[type=number]{width:130px}
   }
   /* Jede Karte wird nur einmal abgefragt, auch wenn sie mehrfach vorkommt (andere Sammlung, andere Variante). */
   function refreshItems(items, statusEl) {
+    items = items.filter(function (i) { return !i.custom; });
     if (refreshing || !items.length) return;
     var groups = {}, order = [];
     items.forEach(function (i) {
@@ -2423,10 +2759,10 @@ input[type=number]{width:130px}
     var item = vSaved[i];
     updateBuyLinks(item);
     $('#lbImg').alt = item.name || '';
-    $('#lbTitle').textContent = item.name || item.id;
+    $('#lbTitle').textContent = (item.name || item.id) + (item.alt ? ' (' + item.alt + ')' : '');
     var ownPhoto = photoOf(item.lang, item.id);
     loadViewerImage(ownPhoto || item.image, item.lang);
-    if (!item.image && !ownPhoto) {
+    if (!item.image && !ownPhoto && !item.custom) {
       getCard(item.lang, item.id).then(function (c) {
         if (c && c.image && vMode === 'saved' && vIndex === i) { item.image = c.image; loadViewerImage(c.image, item.lang); }
       }).catch(function () {});
@@ -2599,6 +2935,32 @@ input[type=number]{width:130px}
     if (curSet) showSet();
   });
 
+  $('#addCustom').addEventListener('click', function () { openCustom({}); });
+  $('#linkBtn').addEventListener('click', linkAll);
+  $('#cstCancel').addEventListener('click', closeCustom);
+  $('#cstWrap').addEventListener('click', function (e) { if (e.target === this) closeCustom(); });
+  $('#cstWrap').addEventListener('keydown', function (e) { if (e.key === 'Escape') closeCustom(); });
+  $('#cstForm').addEventListener('submit', function (e) { e.preventDefault(); cstSubmit(); });
+  $('#cstLang').addEventListener('change', function () {
+    cst.dex = null; cst.suffix = ''; cstSuffixes(); cstPreview(); cstSuggest();
+    $('#cstSetFilter').value = '';
+    cstLoadSets($('#cstLang').value);
+  });
+  $('#cstSetFilter').addEventListener('input', function () { cstRenderSets(); });
+  $('#cstSet').addEventListener('change', function () { $('#cstSetFreeRow').hidden = this.value !== '__free'; });
+  $('#cstName').addEventListener('input', function () {
+    if (cst.dex) { cst.dex = null; cst.suffix = ''; cstSuffixes(); }
+    cstPreview(); cstSuggest();
+  });
+  $('#cstPhotoBtn').addEventListener('click', function () { $('#cstPhotoFile').click(); });
+  $('#cstPhotoFile').addEventListener('change', function (e) {
+    var f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    $('#cstPhotoInfo').textContent = 'Foto wird verarbeitet …';
+    resizePhoto(f).then(function (data) { cst.photo = data; $('#cstPhotoInfo').textContent = 'Foto ausgewählt.'; },
+      function (err) { cst.photo = ''; $('#cstPhotoInfo').textContent = (err && err.message) || 'Das Foto konnte nicht gelesen werden.'; });
+  });
   $('#photoFile').addEventListener('change', function (e) {
     var f = e.target.files && e.target.files[0], it = photoTarget;
     e.target.value = '';
@@ -2665,6 +3027,7 @@ input[type=number]{width:130px}
       state = next;
       try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
       renderCollection();
+      scanLinkable();
     },
     onSave: null,
     onPhoto: null,
@@ -2695,8 +3058,10 @@ input[type=number]{width:130px}
   renderLangs();
   renderCollection();
   loadSets();
+  scanLinkable();
 })();
 </script>
+<script id="dexData" type="application/json">[[1,"Bisasam","Bulbasaur","이상해씨","妙蛙種子","妙蛙种子","フシギダネ"],[2,"Bisaknosp","Ivysaur","이상해풀","妙蛙草","妙蛙草","フシギソウ"],[3,"Bisaflor","Venusaur","이상해꽃","妙蛙花","妙蛙花","フシギバナ"],[4,"Glumanda","Charmander","파이리","小火龍","小火龙","ヒトカゲ"],[5,"Glutexo","Charmeleon","리자드","火恐龍","火恐龙","リザード"],[6,"Glurak","Charizard","리자몽","噴火龍","喷火龙","リザードン"],[7,"Schiggy","Squirtle","꼬부기","傑尼龜","杰尼龟","ゼニガメ"],[8,"Schillok","Wartortle","어니부기","卡咪龜","卡咪龟","カメール"],[9,"Turtok","Blastoise","거북왕","水箭龜","水箭龟","カメックス"],[10,"Raupy","Caterpie","캐터피","綠毛蟲","绿毛虫","キャタピー"],[11,"Safcon","Metapod","단데기","鐵甲蛹","铁甲蛹","トランセル"],[12,"Smettbo","Butterfree","버터플","巴大蝶","巴大蝶","バタフリー"],[13,"Hornliu","Weedle","뿔충이","獨角蟲","独角虫","ビードル"],[14,"Kokuna","Kakuna","딱충이","鐵殼蛹","铁壳蛹","コクーン"],[15,"Bibor","Beedrill","독침붕","大針蜂","大针蜂","スピアー"],[16,"Taubsi","Pidgey","구구","波波","波波","ポッポ"],[17,"Tauboga","Pidgeotto","피죤","比比鳥","比比鸟","ピジョン"],[18,"Tauboss","Pidgeot","피죤투","大比鳥","大比鸟","ピジョット"],[19,"Rattfratz","Rattata","꼬렛","小拉達","小拉达","コラッタ"],[20,"Rattikarl","Raticate","레트라","拉達","拉达","ラッタ"],[21,"Habitak","Spearow","깨비참","烈雀","烈雀","オニスズメ"],[22,"Ibitak","Fearow","깨비드릴조","大嘴雀","大嘴雀","オニドリル"],[23,"Rettan","Ekans","아보","阿柏蛇","阿柏蛇","アーボ"],[24,"Arbok","Arbok","아보크","阿柏怪","阿柏怪","アーボック"],[25,"Pikachu","Pikachu","피카츄","皮卡丘","皮卡丘","ピカチュウ"],[26,"Raichu","Raichu","라이츄","雷丘","雷丘","ライチュウ"],[27,"Sandan","Sandshrew","모래두지","穿山鼠","穿山鼠","サンド"],[28,"Sandamer","Sandslash","고지","穿山王","穿山王","サンドパン"],[29,"Nidoran♀","Nidoran♀","니드런♀","尼多蘭","尼多兰","ニドラン♀"],[30,"Nidorina","Nidorina","니드리나","尼多娜","尼多娜","ニドリーナ"],[31,"Nidoqueen","Nidoqueen","니드퀸","尼多后","尼多后","ニドクイン"],[32,"Nidoran♂","Nidoran♂","니드런♂","尼多朗","尼多朗","ニドラン♂"],[33,"Nidorino","Nidorino","니드리노","尼多力諾","尼多力诺","ニドリーノ"],[34,"Nidoking","Nidoking","니드킹","尼多王","尼多王","ニドキング"],[35,"Piepi","Clefairy","삐삐","皮皮","皮皮","ピッピ"],[36,"Pixi","Clefable","픽시","皮可西","皮可西","ピクシー"],[37,"Vulpix","Vulpix","식스테일","六尾","六尾","ロコン"],[38,"Vulnona","Ninetales","나인테일","九尾","九尾","キュウコン"],[39,"Pummeluff","Jigglypuff","푸린","胖丁","胖丁","プリン"],[40,"Knuddeluff","Wigglytuff","푸크린","胖可丁","胖可丁","プクリン"],[41,"Zubat","Zubat","주뱃","超音蝠","超音蝠","ズバット"],[42,"Golbat","Golbat","골뱃","大嘴蝠","大嘴蝠","ゴルバット"],[43,"Myrapla","Oddish","뚜벅쵸","走路草","走路草","ナゾノクサ"],[44,"Duflor","Gloom","냄새꼬","臭臭花","臭臭花","クサイハナ"],[45,"Giflor","Vileplume","라플레시아","霸王花","霸王花","ラフレシア"],[46,"Paras","Paras","파라스","派拉斯","派拉斯","パラス"],[47,"Parasek","Parasect","파라섹트","派拉斯特","派拉斯特","パラセクト"],[48,"Bluzuk","Venonat","콘팡","毛球","毛球","コンパン"],[49,"Omot","Venomoth","도나리","摩魯蛾","摩鲁蛾","モルフォン"],[50,"Digda","Diglett","디그다","地鼠","地鼠","ディグダ"],[51,"Digdri","Dugtrio","닥트리오","三地鼠","三地鼠","ダグトリオ"],[52,"Mauzi","Meowth","나옹","喵喵","喵喵","ニャース"],[53,"Snobilikat","Persian","페르시온","貓老大","猫老大","ペルシアン"],[54,"Enton","Psyduck","고라파덕","可達鴨","可达鸭","コダック"],[55,"Entoron","Golduck","골덕","哥達鴨","哥达鸭","ゴルダック"],[56,"Menki","Mankey","망키","猴怪","猴怪","マンキー"],[57,"Rasaff","Primeape","성원숭","火爆猴","火暴猴","オコリザル"],[58,"Fukano","Growlithe","가디","卡蒂狗","卡蒂狗","ガーディ"],[59,"Arkani","Arcanine","윈디","風速狗","风速狗","ウインディ"],[60,"Quapsel","Poliwag","발챙이","蚊香蝌蚪","蚊香蝌蚪","ニョロモ"],[61,"Quaputzi","Poliwhirl","슈륙챙이","蚊香君","蚊香君","ニョロゾ"],[62,"Quappo","Poliwrath","강챙이","蚊香泳士","蚊香泳士","ニョロボン"],[63,"Abra","Abra","캐이시","凱西","凯西","ケーシィ"],[64,"Kadabra","Kadabra","윤겔라","勇基拉","勇基拉","ユンゲラー"],[65,"Simsala","Alakazam","후딘","胡地","胡地","フーディン"],[66,"Machollo","Machop","알통몬","腕力","腕力","ワンリキー"],[67,"Maschock","Machoke","근육몬","豪力","豪力","ゴーリキー"],[68,"Machomei","Machamp","괴력몬","怪力","怪力","カイリキー"],[69,"Knofensa","Bellsprout","모다피","喇叭芽","喇叭芽","マダツボミ"],[70,"Ultrigaria","Weepinbell","우츠동","口呆花","口呆花","ウツドン"],[71,"Sarzenia","Victreebel","우츠보트","大食花","大食花","ウツボット"],[72,"Tentacha","Tentacool","왕눈해","瑪瑙水母","玛瑙水母","メノクラゲ"],[73,"Tentoxa","Tentacruel","독파리","毒刺水母","毒刺水母","ドククラゲ"],[74,"Kleinstein","Geodude","꼬마돌","小拳石","小拳石","イシツブテ"],[75,"Georok","Graveler","데구리","隆隆石","隆隆石","ゴローン"],[76,"Geowaz","Golem","딱구리","隆隆岩","隆隆岩","ゴローニャ"],[77,"Ponita","Ponyta","포니타","小火馬","小火马","ポニータ"],[78,"Gallopa","Rapidash","날쌩마","烈焰馬","烈焰马","ギャロップ"],[79,"Flegmon","Slowpoke","야돈","呆呆獸","呆呆兽","ヤドン"],[80,"Lahmus","Slowbro","야도란","呆殼獸","呆壳兽","ヤドラン"],[81,"Magnetilo","Magnemite","코일","小磁怪","小磁怪","コイル"],[82,"Magneton","Magneton","레어코일","三合一磁怪","三合一磁怪","レアコイル"],[83,"Porenta","Farfetch’d","파오리","大蔥鴨","大葱鸭","カモネギ"],[84,"Dodu","Doduo","두두","嘟嘟","嘟嘟","ドードー"],[85,"Dodri","Dodrio","두트리오","嘟嘟利","嘟嘟利","ドードリオ"],[86,"Jurob","Seel","쥬쥬","小海獅","小海狮","パウワウ"],[87,"Jugong","Dewgong","쥬레곤","白海獅","白海狮","ジュゴン"],[88,"Sleima","Grimer","질퍽이","臭泥","臭泥","ベトベター"],[89,"Sleimok","Muk","질뻐기","臭臭泥","臭臭泥","ベトベトン"],[90,"Muschas","Shellder","셀러","大舌貝","大舌贝","シェルダー"],[91,"Austos","Cloyster","파르셀","刺甲貝","刺甲贝","パルシェン"],[92,"Nebulak","Gastly","고오스","鬼斯","鬼斯","ゴース"],[93,"Alpollo","Haunter","고우스트","鬼斯通","鬼斯通","ゴースト"],[94,"Gengar","Gengar","팬텀","耿鬼","耿鬼","ゲンガー"],[95,"Onix","Onix","롱스톤","大岩蛇","大岩蛇","イワーク"],[96,"Traumato","Drowzee","슬리프","催眠貘","催眠貘","スリープ"],[97,"Hypno","Hypno","슬리퍼","引夢貘人","引梦貘人","スリーパー"],[98,"Krabby","Krabby","크랩","大鉗蟹","大钳蟹","クラブ"],[99,"Kingler","Kingler","킹크랩","巨鉗蟹","巨钳蟹","キングラー"],[100,"Voltobal","Voltorb","찌리리공","霹靂電球","霹雳电球","ビリリダマ"],[101,"Lektrobal","Electrode","붐볼","頑皮雷彈","顽皮雷弹","マルマイン"],[102,"Owei","Exeggcute","아라리","蛋蛋","蛋蛋","タマタマ"],[103,"Kokowei","Exeggutor","나시","椰蛋樹","椰蛋树","ナッシー"],[104,"Tragosso","Cubone","탕구리","卡拉卡拉","卡拉卡拉","カラカラ"],[105,"Knogga","Marowak","텅구리","嘎啦嘎啦","嘎啦嘎啦","ガラガラ"],[106,"Kicklee","Hitmonlee","시라소몬","飛腿郎","飞腿郎","サワムラー"],[107,"Nockchan","Hitmonchan","홍수몬","快拳郎","快拳郎","エビワラー"],[108,"Schlurp","Lickitung","내루미","大舌頭","大舌头","ベロリンガ"],[109,"Smogon","Koffing","또가스","瓦斯彈","瓦斯弹","ドガース"],[110,"Smogmog","Weezing","또도가스","雙彈瓦斯","双弹瓦斯","マタドガス"],[111,"Rihorn","Rhyhorn","뿔카노","獨角犀牛","独角犀牛","サイホーン"],[112,"Rizeros","Rhydon","코뿌리","鑽角犀獸","钻角犀兽","サイドン"],[113,"Chaneira","Chansey","럭키","吉利蛋","吉利蛋","ラッキー"],[114,"Tangela","Tangela","덩쿠리","蔓藤怪","蔓藤怪","モンジャラ"],[115,"Kangama","Kangaskhan","캥카","袋獸","袋兽","ガルーラ"],[116,"Seeper","Horsea","쏘드라","墨海馬","墨海马","タッツー"],[117,"Seemon","Seadra","시드라","海刺龍","海刺龙","シードラ"],[118,"Goldini","Goldeen","콘치","角金魚","角金鱼","トサキント"],[119,"Golking","Seaking","왕콘치","金魚王","金鱼王","アズマオウ"],[120,"Sterndu","Staryu","별가사리","海星星","海星星","ヒトデマン"],[121,"Starmie","Starmie","아쿠스타","寶石海星","宝石海星","スターミー"],[122,"Pantimos","Mr. Mime","마임맨","魔牆人偶","魔墙人偶","バリヤード"],[123,"Sichlor","Scyther","스라크","飛天螳螂","飞天螳螂","ストライク"],[124,"Rossana","Jynx","루주라","迷唇姐","迷唇姐","ルージュラ"],[125,"Elektek","Electabuzz","에레브","電擊獸","电击兽","エレブー"],[126,"Magmar","Magmar","마그마","鴨嘴火獸","鸭嘴火兽","ブーバー"],[127,"Pinsir","Pinsir","쁘사이저","凱羅斯","凯罗斯","カイロス"],[128,"Tauros","Tauros","켄타로스","肯泰羅","肯泰罗","ケンタロス"],[129,"Karpador","Magikarp","잉어킹","鯉魚王","鲤鱼王","コイキング"],[130,"Garados","Gyarados","갸라도스","暴鯉龍","暴鲤龙","ギャラドス"],[131,"Lapras","Lapras","라프라스","拉普拉斯","拉普拉斯","ラプラス"],[132,"Ditto","Ditto","메타몽","百變怪","百变怪","メタモン"],[133,"Evoli","Eevee","이브이","伊布","伊布","イーブイ"],[134,"Aquana","Vaporeon","샤미드","水伊布","水伊布","シャワーズ"],[135,"Blitza","Jolteon","쥬피썬더","雷伊布","雷伊布","サンダース"],[136,"Flamara","Flareon","부스터","火伊布","火伊布","ブースター"],[137,"Porygon","Porygon","폴리곤","多邊獸","多边兽","ポリゴン"],[138,"Amonitas","Omanyte","암나이트","菊石獸","菊石兽","オムナイト"],[139,"Amoroso","Omastar","암스타","多刺菊石獸","多刺菊石兽","オムスター"],[140,"Kabuto","Kabuto","투구","化石盔","化石盔","カブト"],[141,"Kabutops","Kabutops","투구푸스","鐮刀盔","镰刀盔","カブトプス"],[142,"Aerodactyl","Aerodactyl","프테라","化石翼龍","化石翼龙","プテラ"],[143,"Relaxo","Snorlax","잠만보","卡比獸","卡比兽","カビゴン"],[144,"Arktos","Articuno","프리져","急凍鳥","急冻鸟","フリーザー"],[145,"Zapdos","Zapdos","썬더","閃電鳥","闪电鸟","サンダー"],[146,"Lavados","Moltres","파이어","火焰鳥","火焰鸟","ファイヤー"],[147,"Dratini","Dratini","미뇽","迷你龍","迷你龙","ミニリュウ"],[148,"Dragonir","Dragonair","신뇽","哈克龍","哈克龙","ハクリュー"],[149,"Dragoran","Dragonite","망나뇽","快龍","快龙","カイリュー"],[150,"Mewtu","Mewtwo","뮤츠","超夢","超梦","ミュウツー"],[151,"Mew","Mew","뮤","夢幻","梦幻","ミュウ"],[152,"Endivie","Chikorita","치코리타","菊草葉","菊草叶","チコリータ"],[153,"Lorblatt","Bayleef","베이리프","月桂葉","月桂叶","ベイリーフ"],[154,"Meganie","Meganium","메가니움","大竺葵","大竺葵","メガニウム"],[155,"Feurigel","Cyndaquil","브케인","火球鼠","火球鼠","ヒノアラシ"],[156,"Igelavar","Quilava","마그케인","火岩鼠","火岩鼠","マグマラシ"],[157,"Tornupto","Typhlosion","블레이범","火爆獸","火暴兽","バクフーン"],[158,"Karnimani","Totodile","리아코","小鋸鱷","小锯鳄","ワニノコ"],[159,"Tyracroc","Croconaw","엘리게이","藍鱷","蓝鳄","アリゲイツ"],[160,"Impergator","Feraligatr","장크로다일","大力鱷","大力鳄","オーダイル"],[161,"Wiesor","Sentret","꼬리선","尾立","尾立","オタチ"],[162,"Wiesenior","Furret","다꼬리","大尾立","大尾立","オオタチ"],[163,"Hoothoot","Hoothoot","부우부","咕咕","咕咕","ホーホー"],[164,"Noctuh","Noctowl","야부엉","貓頭夜鷹","猫头夜鹰","ヨルノズク"],[165,"Ledyba","Ledyba","레디바","芭瓢蟲","芭瓢虫","レディバ"],[166,"Ledian","Ledian","레디안","安瓢蟲","安瓢虫","レディアン"],[167,"Webarak","Spinarak","페이검","圓絲蛛","圆丝蛛","イトマル"],[168,"Ariados","Ariados","아리아도스","阿利多斯","阿利多斯","アリアドス"],[169,"Iksbat","Crobat","크로뱃","叉字蝠","叉字蝠","クロバット"],[170,"Lampi","Chinchou","초라기","燈籠魚","灯笼鱼","チョンチー"],[171,"Lanturn","Lanturn","랜턴","電燈怪","电灯怪","ランターン"],[172,"Pichu","Pichu","피츄","皮丘","皮丘","ピチュー"],[173,"Pii","Cleffa","삐","皮寶寶","皮宝宝","ピィ"],[174,"Fluffeluff","Igglybuff","푸푸린","寶寶丁","宝宝丁","ププリン"],[175,"Togepi","Togepi","토게피","波克比","波克比","トゲピー"],[176,"Togetic","Togetic","토게틱","波克基古","波克基古","トゲチック"],[177,"Natu","Natu","네이티","天然雀","天然雀","ネイティ"],[178,"Xatu","Xatu","네이티오","天然鳥","天然鸟","ネイティオ"],[179,"Voltilamm","Mareep","메리프","咩利羊","咩利羊","メリープ"],[180,"Waaty","Flaaffy","보송송","茸茸羊","茸茸羊","モココ"],[181,"Ampharos","Ampharos","전룡","電龍","电龙","デンリュウ"],[182,"Blubella","Bellossom","아르코","美麗花","美丽花","キレイハナ"],[183,"Marill","Marill","마릴","瑪力露","玛力露","マリル"],[184,"Azumarill","Azumarill","마릴리","瑪力露麗","玛力露丽","マリルリ"],[185,"Mogelbaum","Sudowoodo","꼬지모","樹才怪","树才怪","ウソッキー"],[186,"Quaxo","Politoed","왕구리","蚊香蛙皇","蚊香蛙皇","ニョロトノ"],[187,"Hoppspross","Hoppip","통통코","毽子草","毽子草","ハネッコ"],[188,"Hubelupf","Skiploom","두코","毽子花","毽子花","ポポッコ"],[189,"Papungha","Jumpluff","솜솜코","毽子棉","毽子棉","ワタッコ"],[190,"Griffel","Aipom","에이팜","長尾怪手","长尾怪手","エイパム"],[191,"Sonnkern","Sunkern","해너츠","向日種子","向日种子","ヒマナッツ"],[192,"Sonnflora","Sunflora","해루미","向日花怪","向日花怪","キマワリ"],[193,"Yanma","Yanma","왕자리","蜻蜻蜓","蜻蜻蜓","ヤンヤンマ"],[194,"Felino","Wooper","우파","烏波","乌波","ウパー"],[195,"Morlord","Quagsire","누오","沼王","沼王","ヌオー"],[196,"Psiana","Espeon","에브이","太陽伊布","太阳伊布","エーフィ"],[197,"Nachtara","Umbreon","블래키","月亮伊布","月亮伊布","ブラッキー"],[198,"Kramurx","Murkrow","니로우","黑暗鴉","黑暗鸦","ヤミカラス"],[199,"Laschoking","Slowking","야도킹","呆呆王","呆呆王","ヤドキング"],[200,"Traunfugil","Misdreavus","무우마","夢妖","梦妖","ムウマ"],[201,"Icognito","Unown","안농","未知圖騰","未知图腾","アンノーン"],[202,"Woingenau","Wobbuffet","마자용","果然翁","果然翁","ソーナンス"],[203,"Girafarig","Girafarig","키링키","麒麟奇","麒麟奇","キリンリキ"],[204,"Tannza","Pineco","피콘","榛果球","榛果球","クヌギダマ"],[205,"Forstellka","Forretress","쏘콘","佛烈托斯","佛烈托斯","フォレトス"],[206,"Dummisel","Dunsparce","노고치","土龍弟弟","土龙弟弟","ノコッチ"],[207,"Skorgla","Gligar","글라이거","天蠍","天蝎","グライガー"],[208,"Stahlos","Steelix","강철톤","大鋼蛇","大钢蛇","ハガネール"],[209,"Snubbull","Snubbull","블루","布魯","布鲁","ブルー"],[210,"Granbull","Granbull","그랑블루","布魯皇","布鲁皇","グランブル"],[211,"Baldorfish","Qwilfish","침바루","千針魚","千针鱼","ハリーセン"],[212,"Scherox","Scizor","핫삼","巨鉗螳螂","巨钳螳螂","ハッサム"],[213,"Pottrott","Shuckle","단단지","壺壺","壶壶","ツボツボ"],[214,"Skaraborn","Heracross","헤라크로스","赫拉克羅斯","赫拉克罗斯","ヘラクロス"],[215,"Sniebel","Sneasel","포푸니","狃拉","狃拉","ニューラ"],[216,"Teddiursa","Teddiursa","깜지곰","熊寶寶","熊宝宝","ヒメグマ"],[217,"Ursaring","Ursaring","링곰","圈圈熊","圈圈熊","リングマ"],[218,"Schneckmag","Slugma","마그마그","熔岩蟲","熔岩虫","マグマッグ"],[219,"Magcargo","Magcargo","마그카르고","熔岩蝸牛","熔岩蜗牛","マグカルゴ"],[220,"Quiekel","Swinub","꾸꾸리","小山豬","小山猪","ウリムー"],[221,"Keifel","Piloswine","메꾸리","長毛豬","长毛猪","イノムー"],[222,"Corasonn","Corsola","코산호","太陽珊瑚","太阳珊瑚","サニーゴ"],[223,"Remoraid","Remoraid","총어","鐵炮魚","铁炮鱼","テッポウオ"],[224,"Octillery","Octillery","대포무노","章魚桶","章鱼桶","オクタン"],[225,"Botogel","Delibird","딜리버드","信使鳥","信使鸟","デリバード"],[226,"Mantax","Mantine","만타인","巨翅飛魚","巨翅飞鱼","マンタイン"],[227,"Panzaeron","Skarmory","무장조","盔甲鳥","盔甲鸟","エアームド"],[228,"Hunduster","Houndour","델빌","戴魯比","戴鲁比","デルビル"],[229,"Hundemon","Houndoom","헬가","黑魯加","黑鲁加","ヘルガー"],[230,"Seedraking","Kingdra","킹드라","刺龍王","刺龙王","キングドラ"],[231,"Phanpy","Phanpy","코코리","小小象","小小象","ゴマゾウ"],[232,"Donphan","Donphan","코리갑","頓甲","顿甲","ドンファン"],[233,"Porygon2","Porygon2","폴리곤2","多邊獸Ⅱ","多边兽２型","ポリゴン２"],[234,"Damhirplex","Stantler","노라키","驚角鹿","惊角鹿","オドシシ"],[235,"Farbeagle","Smeargle","루브도","圖圖犬","图图犬","ドーブル"],[236,"Rabauz","Tyrogue","배루키","無畏小子","无畏小子","バルキー"],[237,"Kapoera","Hitmontop","카포에라","戰舞郎","战舞郎","カポエラー"],[238,"Kussilla","Smoochum","뽀뽀라","迷唇娃","迷唇娃","ムチュール"],[239,"Elekid","Elekid","에레키드","電擊怪","电击怪","エレキッド"],[240,"Magby","Magby","마그비","鴨嘴寶寶","鸭嘴宝宝","ブビィ"],[241,"Miltank","Miltank","밀탱크","大奶罐","大奶罐","ミルタンク"],[242,"Heiteira","Blissey","해피너스","幸福蛋","幸福蛋","ハピナス"],[243,"Raikou","Raikou","라이코","雷公","雷公","ライコウ"],[244,"Entei","Entei","앤테이","炎帝","炎帝","エンテイ"],[245,"Suicune","Suicune","스이쿤","水君","水君","スイクン"],[246,"Larvitar","Larvitar","애버라스","幼基拉斯","幼基拉斯","ヨーギラス"],[247,"Pupitar","Pupitar","데기라스","沙基拉斯","沙基拉斯","サナギラス"],[248,"Despotar","Tyranitar","마기라스","班基拉斯","班基拉斯","バンギラス"],[249,"Lugia","Lugia","루기아","洛奇亞","洛奇亚","ルギア"],[250,"Ho-Oh","Ho-Oh","칠색조","鳳王","凤王","ホウオウ"],[251,"Celebi","Celebi","세레비","時拉比","时拉比","セレビィ"],[252,"Geckarbor","Treecko","나무지기","木守宮","木守宫","キモリ"],[253,"Reptain","Grovyle","나무돌이","森林蜥蜴","森林蜥蜴","ジュプトル"],[254,"Gewaldro","Sceptile","나무킹","蜥蜴王","蜥蜴王","ジュカイン"],[255,"Flemmli","Torchic","아차모","火稚雞","火稚鸡","アチャモ"],[256,"Jungglut","Combusken","영치코","力壯雞","力壮鸡","ワカシャモ"],[257,"Lohgock","Blaziken","번치코","火焰雞","火焰鸡","バシャーモ"],[258,"Hydropi","Mudkip","물짱이","水躍魚","水跃鱼","ミズゴロウ"],[259,"Moorabbel","Marshtomp","늪짱이","沼躍魚","沼跃鱼","ヌマクロー"],[260,"Sumpex","Swampert","대짱이","巨沼怪","巨沼怪","ラグラージ"],[261,"Fiffyen","Poochyena","포챠나","土狼犬","土狼犬","ポチエナ"],[262,"Magnayen","Mightyena","그라에나","大狼犬","大狼犬","グラエナ"],[263,"Zigzachs","Zigzagoon","지그제구리","蛇紋熊","蛇纹熊","ジグザグマ"],[264,"Geradaks","Linoone","직구리","直衝熊","直冲熊","マッスグマ"],[265,"Waumpel","Wurmple","개무소","刺尾蟲","刺尾虫","ケムッソ"],[266,"Schaloko","Silcoon","실쿤","甲殼繭","甲壳茧","カラサリス"],[267,"Papinella","Beautifly","뷰티플라이","狩獵鳳蝶","狩猎凤蝶","アゲハント"],[268,"Panekon","Cascoon","카스쿤","盾甲繭","盾甲茧","マユルド"],[269,"Pudox","Dustox","독케일","毒粉蛾","毒粉蛾","ドクケイル"],[270,"Loturzel","Lotad","연꽃몬","蓮葉童子","莲叶童子","ハスボー"],[271,"Lombrero","Lombre","로토스","蓮帽小童","莲帽小童","ハスブレロ"],[272,"Kappalores","Ludicolo","로파파","樂天河童","乐天河童","ルンパッパ"],[273,"Samurzel","Seedot","도토링","橡實果","橡实果","タネボー"],[274,"Blanas","Nuzleaf","잎새코","長鼻葉","长鼻叶","コノハナ"],[275,"Tengulist","Shiftry","다탱구","狡猾天狗","狡猾天狗","ダーテング"],[276,"Schwalbini","Taillow","테일로","傲骨燕","傲骨燕","スバメ"],[277,"Schwalboss","Swellow","스왈로","大王燕","大王燕","オオスバメ"],[278,"Wingull","Wingull","갈모매","長翅鷗","长翅鸥","キャモメ"],[279,"Pelipper","Pelipper","패리퍼","大嘴鷗","大嘴鸥","ペリッパー"],[280,"Trasla","Ralts","랄토스","拉魯拉絲","拉鲁拉丝","ラルトス"],[281,"Kirlia","Kirlia","킬리아","奇魯莉安","奇鲁莉安","キルリア"],[282,"Guardevoir","Gardevoir","가디안","沙奈朵","沙奈朵","サーナイト"],[283,"Gehweiher","Surskit","비구술","溜溜糖球","溜溜糖球","アメタマ"],[284,"Maskeregen","Masquerain","비나방","雨翅蛾","雨翅蛾","アメモース"],[285,"Knilz","Shroomish","버섯꼬","蘑蘑菇","蘑蘑菇","キノココ"],[286,"Kapilz","Breloom","버섯모","斗笠菇","斗笠菇","キノガッサ"],[287,"Bummelz","Slakoth","게을로","懶人獺","懒人獭","ナマケロ"],[288,"Muntier","Vigoroth","발바로","過動猿","过动猿","ヤルキモノ"],[289,"Letarking","Slaking","게을킹","請假王","请假王","ケッキング"],[290,"Nincada","Nincada","토중몬","土居忍士","土居忍士","ツチニン"],[291,"Ninjask","Ninjask","아이스크","鐵面忍者","铁面忍者","テッカニン"],[292,"Ninjatom","Shedinja","껍질몬","脫殼忍者","脱壳忍者","ヌケニン"],[293,"Flurmel","Whismur","소곤룡","咕妞妞","咕妞妞","ゴニョニョ"],[294,"Krakeelo","Loudred","노공룡","吼爆彈","吼爆弹","ドゴーム"],[295,"Krawumms","Exploud","폭음룡","爆音怪","爆音怪","バクオング"],[296,"Makuhita","Makuhita","마크탕","幕下力士","幕下力士","マクノシタ"],[297,"Hariyama","Hariyama","하리뭉","鐵掌力士","铁掌力士","ハリテヤマ"],[298,"Azurill","Azurill","루리리","露力麗","露力丽","ルリリ"],[299,"Nasgnet","Nosepass","코코파스","朝北鼻","朝北鼻","ノズパス"],[300,"Eneco","Skitty","에나비","向尾喵","向尾喵","エネコ"],[301,"Enekoro","Delcatty","델케티","優雅貓","优雅猫","エネコロロ"],[302,"Zobiris","Sableye","깜까미","勾魂眼","勾魂眼","ヤミラミ"],[303,"Flunkifer","Mawile","입치트","大嘴娃","大嘴娃","クチート"],[304,"Stollunior","Aron","가보리","可可多拉","可可多拉","ココドラ"],[305,"Stollrak","Lairon","갱도라","可多拉","可多拉","コドラ"],[306,"Stolloss","Aggron","보스로라","波士可多拉","波士可多拉","ボスゴドラ"],[307,"Meditie","Meditite","요가랑","瑪沙那","玛沙那","アサナン"],[308,"Meditalis","Medicham","요가램","恰雷姆","恰雷姆","チャーレム"],[309,"Frizelbliz","Electrike","썬더라이","落雷獸","落雷兽","ラクライ"],[310,"Voltenso","Manectric","썬더볼트","雷電獸","雷电兽","ライボルト"],[311,"Plusle","Plusle","플러시","正電拍拍","正电拍拍","プラスル"],[312,"Minun","Minun","마이농","負電拍拍","負电拍拍","マイナン"],[313,"Volbeat","Volbeat","볼비트","電螢蟲","电萤虫","バルビート"],[314,"Illumise","Illumise","네오비트","甜甜螢","甜甜萤","イルミーゼ"],[315,"Roselia","Roselia","로젤리아","毒薔薇","毒蔷薇","ロゼリア"],[316,"Schluppuck","Gulpin","꼴깍몬","溶食獸","溶食兽","ゴクリン"],[317,"Schlukwech","Swalot","꿀꺽몬","吞食獸","吞食兽","マルノーム"],[318,"Kanivanha","Carvanha","샤프니아","利牙魚","利牙鱼","キバニア"],[319,"Tohaido","Sharpedo","샤크니아","巨牙鯊","巨牙鲨","サメハダー"],[320,"Wailmer","Wailmer","고래왕자","吼吼鯨","吼吼鲸","ホエルコ"],[321,"Wailord","Wailord","고래왕","吼鯨王","吼鲸王","ホエルオー"],[322,"Camaub","Numel","둔타","呆火駝","呆火驼","ドンメル"],[323,"Camerupt","Camerupt","폭타","噴火駝","喷火驼","バクーダ"],[324,"Qurtel","Torkoal","코터스","煤炭龜","煤炭龟","コータス"],[325,"Spoink","Spoink","피그점프","跳跳豬","跳跳猪","バネブー"],[326,"Groink","Grumpig","피그킹","噗噗豬","噗噗猪","ブーピッグ"],[327,"Pandir","Spinda","얼루기","晃晃斑","晃晃斑","パッチール"],[328,"Knacklion","Trapinch","톱치","大顎蟻","大颚蚁","ナックラー"],[329,"Vibrava","Vibrava","비브라바","超音波幼蟲","超音波幼虫","ビブラーバ"],[330,"Libelldra","Flygon","플라이곤","沙漠蜻蜓","沙漠蜻蜓","フライゴン"],[331,"Tuska","Cacnea","선인왕","刺球仙人掌","刺球仙人掌","サボネア"],[332,"Noktuska","Cacturne","밤선인","夢歌仙人掌","梦歌仙人掌","ノクタス"],[333,"Wablu","Swablu","파비코","青綿鳥","青绵鸟","チルット"],[334,"Altaria","Altaria","파비코리","七夕青鳥","七夕青鸟","チルタリス"],[335,"Sengo","Zangoose","쟝고","貓鼬斬","猫鼬斩","ザングース"],[336,"Vipitis","Seviper","세비퍼","飯匙蛇","饭匙蛇","ハブネーク"],[337,"Lunastein","Lunatone","루나톤","月石","月石","ルナトーン"],[338,"Sonnfel","Solrock","솔록","太陽岩","太阳岩","ソルロック"],[339,"Schmerbe","Barboach","미꾸리","泥泥鰍","泥泥鳅","ドジョッチ"],[340,"Welsar","Whiscash","메깅","鯰魚王","鲶鱼王","ナマズン"],[341,"Krebscorps","Corphish","가재군","龍蝦小兵","龙虾小兵","ヘイガニ"],[342,"Krebutack","Crawdaunt","가재장군","鐵螯龍蝦","铁螯龙虾","シザリガー"],[343,"Puppance","Baltoy","오뚝군","天秤偶","天秤偶","ヤジロン"],[344,"Lepumentas","Claydol","점토도리","念力土偶","念力土偶","ネンドール"],[345,"Liliep","Lileep","릴링","觸手百合","触手百合","リリーラ"],[346,"Wielie","Cradily","릴리요","搖籃百合","摇篮百合","ユレイドル"],[347,"Anorith","Anorith","아노딥스","太古羽蟲","太古羽虫","アノプス"],[348,"Armaldo","Armaldo","아말도","太古盔甲","太古盔甲","アーマルド"],[349,"Barschwa","Feebas","빈티나","醜醜魚","丑丑鱼","ヒンバス"],[350,"Milotic","Milotic","밀로틱","美納斯","美纳斯","ミロカロス"],[351,"Formeo","Castform","캐스퐁","飄浮泡泡","飘浮泡泡","ポワルン"],[352,"Kecleon","Kecleon","켈리몬","變隱龍","变隐龙","カクレオン"],[353,"Shuppet","Shuppet","어둠대신","怨影娃娃","怨影娃娃","カゲボウズ"],[354,"Banette","Banette","다크펫","詛咒娃娃","诅咒娃娃","ジュペッタ"],[355,"Zwirrlicht","Duskull","해골몽","夜巡靈","夜巡灵","ヨマワル"],[356,"Zwirrklop","Dusclops","미라몽","彷徨夜靈","彷徨夜灵","サマヨール"],[357,"Tropius","Tropius","트로피우스","熱帶龍","热带龙","トロピウス"],[358,"Palimpalim","Chimecho","치렁","風鈴鈴","风铃铃","チリーン"],[359,"Absol","Absol","앱솔","阿勃梭魯","阿勃梭鲁","アブソル"],[360,"Isso","Wynaut","마자","小果然","小果然","ソーナノ"],[361,"Schneppke","Snorunt","눈꼬마","雪童子","雪童子","ユキワラシ"],[362,"Firnontor","Glalie","얼음귀신","冰鬼護","冰鬼护","オニゴーリ"],[363,"Seemops","Spheal","대굴레오","海豹球","海豹球","タマザラシ"],[364,"Seejong","Sealeo","씨레오","海魔獅","海魔狮","トドグラー"],[365,"Walraisa","Walrein","씨카이저","帝牙海獅","帝牙海狮","トドゼルガ"],[366,"Perlu","Clamperl","진주몽","珍珠貝","珍珠贝","パールル"],[367,"Aalabyss","Huntail","헌테일","獵斑魚","猎斑鱼","ハンテール"],[368,"Saganabyss","Gorebyss","분홍장이","櫻花魚","樱花鱼","サクラビス"],[369,"Relicanth","Relicanth","시라칸","古空棘魚","古空棘鱼","ジーランス"],[370,"Liebiskus","Luvdisc","사랑동이","愛心魚","爱心鱼","ラブカス"],[371,"Kindwurm","Bagon","아공이","寶貝龍","宝贝龙","タツベイ"],[372,"Draschel","Shelgon","쉘곤","甲殼龍","甲壳龙","コモルー"],[373,"Brutalanda","Salamence","보만다","暴飛龍","暴飞龙","ボーマンダ"],[374,"Tanhel","Beldum","메탕","鐵啞鈴","铁哑铃","ダンバル"],[375,"Metang","Metang","메탕구","金屬怪","金属怪","メタング"],[376,"Metagross","Metagross","메타그로스","巨金怪","巨金怪","メタグロス"],[377,"Regirock","Regirock","레지락","雷吉洛克","雷吉洛克","レジロック"],[378,"Regice","Regice","레지아이스","雷吉艾斯","雷吉艾斯","レジアイス"],[379,"Registeel","Registeel","레지스틸","雷吉斯奇魯","雷吉斯奇鲁","レジスチル"],[380,"Latias","Latias","라티아스","拉帝亞斯","拉帝亚斯","ラティアス"],[381,"Latios","Latios","라티오스","拉帝歐斯","拉帝欧斯","ラティオス"],[382,"Kyogre","Kyogre","가이오가","蓋歐卡","盖欧卡","カイオーガ"],[383,"Groudon","Groudon","그란돈","固拉多","固拉多","グラードン"],[384,"Rayquaza","Rayquaza","레쿠쟈","烈空坐","烈空坐","レックウザ"],[385,"Jirachi","Jirachi","지라치","基拉祈","基拉祈","ジラーチ"],[386,"Deoxys","Deoxys","테오키스","代歐奇希斯","代欧奇希斯","デオキシス"],[387,"Chelast","Turtwig","모부기","草苗龜","草苗龟","ナエトル"],[388,"Chelcarain","Grotle","수풀부기","樹林龜","树林龟","ハヤシガメ"],[389,"Chelterrar","Torterra","토대부기","土台龜","土台龟","ドダイトス"],[390,"Panflam","Chimchar","불꽃숭이","小火焰猴","小火焰猴","ヒコザル"],[391,"Panpyro","Monferno","파이숭이","猛火猴","猛火猴","モウカザル"],[392,"Panferno","Infernape","초염몽","烈焰猴","烈焰猴","ゴウカザル"],[393,"Plinfa","Piplup","팽도리","波加曼","波加曼","ポッチャマ"],[394,"Pliprin","Prinplup","팽태자","波皇子","波皇子","ポッタイシ"],[395,"Impoleon","Empoleon","엠페르트","帝王拿波","帝王拿波","エンペルト"],[396,"Staralili","Starly","찌르꼬","姆克兒","姆克儿","ムックル"],[397,"Staravia","Staravia","찌르버드","姆克鳥","姆克鸟","ムクバード"],[398,"Staraptor","Staraptor","찌르호크","姆克鷹","姆克鹰","ムクホーク"],[399,"Bidiza","Bidoof","비버니","大牙狸","大牙狸","ビッパ"],[400,"Bidifas","Bibarel","비버통","大尾狸","大尾狸","ビーダル"],[401,"Zirpurze","Kricketot","귀뚤뚜기","圓法師","圆法师","コロボーシ"],[402,"Zirpeise","Kricketune","귀뚤톡크","音箱蟀","音箱蟀","コロトック"],[403,"Sheinux","Shinx","꼬링크","小貓怪","小猫怪","コリンク"],[404,"Luxio","Luxio","럭시오","勒克貓","勒克猫","ルクシオ"],[405,"Luxtra","Luxray","렌트라","倫琴貓","伦琴猫","レントラー"],[406,"Knospi","Budew","꼬몽울","含羞苞","含羞苞","スボミー"],[407,"Roserade","Roserade","로즈레이드","羅絲雷朵","罗丝雷朵","ロズレイド"],[408,"Koknodon","Cranidos","두개도스","頭蓋龍","头盖龙","ズガイドス"],[409,"Rameidon","Rampardos","램펄드","戰槌龍","战槌龙","ラムパルド"],[410,"Schilterus","Shieldon","방패톱스","盾甲龍","盾甲龙","タテトプス"],[411,"Bollterus","Bastiodon","바리톱스","護城龍","护城龙","トリデプス"],[412,"Burmy","Burmy","도롱충이","結草兒","结草儿","ミノムッチ"],[413,"Burmadame","Wormadam","도롱마담","結草貴婦","结草贵妇","ミノマダム"],[414,"Moterpel","Mothim","나메일","紳士蛾","绅士蛾","ガーメイル"],[415,"Wadribie","Combee","세꿀버리","三蜜蜂","三蜜蜂","ミツハニー"],[416,"Honweisel","Vespiquen","비퀸","蜂女王","蜂女王","ビークイン"],[417,"Pachirisu","Pachirisu","파치리스","帕奇利茲","帕奇利兹","パチリス"],[418,"Bamelin","Buizel","브이젤","泳圈鼬","泳圈鼬","ブイゼル"],[419,"Bojelin","Floatzel","플로젤","浮潛鼬","浮潜鼬","フローゼル"],[420,"Kikugi","Cherubi","체리버","櫻花寶","樱花宝","チェリンボ"],[421,"Kinoso","Cherrim","체리꼬","櫻花兒","樱花儿","チェリム"],[422,"Schalellos","Shellos","깝질무","無殼海兔","无壳海兔","カラナクシ"],[423,"Gastrodon","Gastrodon","트리토돈","海兔獸","海兔兽","トリトドン"],[424,"Ambidiffel","Ambipom","겟핸보숭","雙尾怪手","双尾怪手","エテボース"],[425,"Driftlon","Drifloon","흔들풍손","飄飄球","飘飘球","フワンテ"],[426,"Drifzepeli","Drifblim","둥실라이드","隨風球","随风球","フワライド"],[427,"Haspiror","Buneary","이어롤","捲捲耳","卷卷耳","ミミロル"],[428,"Schlapor","Lopunny","이어롭","長耳兔","长耳兔","ミミロップ"],[429,"Traunmagil","Mismagius","무우마직","夢妖魔","梦妖魔","ムウマージ"],[430,"Kramshef","Honchkrow","돈크로우","烏鴉頭頭","乌鸦头头","ドンカラス"],[431,"Charmian","Glameow","나옹마","魅力喵","魅力喵","ニャルマー"],[432,"Shnurgarst","Purugly","몬냥이","東施喵","东施喵","ブニャット"],[433,"Klingplim","Chingling","랑딸랑","鈴鐺響","铃铛响","リーシャン"],[434,"Skunkapuh","Stunky","스컹뿡","臭鼬噗","臭鼬噗","スカンプー"],[435,"Skuntank","Skuntank","스컹탱크","坦克臭鼬","坦克臭鼬","スカタンク"],[436,"Bronzel","Bronzor","동미러","銅鏡怪","铜镜怪","ドーミラー"],[437,"Bronzong","Bronzong","동탁군","青銅鐘","青铜钟","ドータクン"],[438,"Mobai","Bonsly","꼬지지","盆才怪","盆才怪","ウソハチ"],[439,"Pantimimi","Mime Jr.","흉내내","魔尼尼","魔尼尼","マネネ"],[440,"Wonneira","Happiny","핑복","小福蛋","小福蛋","ピンプク"],[441,"Plaudagei","Chatot","페라페","聒噪鳥","聒噪鸟","ペラップ"],[442,"Kryppuk","Spiritomb","화강돌","花岩怪","花岩怪","ミカルゲ"],[443,"Kaumalat","Gible","딥상어동","圓陸鯊","圆陆鲨","フカマル"],[444,"Knarksel","Gabite","한바이트","尖牙陸鯊","尖牙陆鲨","ガバイト"],[445,"Knakrack","Garchomp","한카리아스","烈咬陸鯊","烈咬陆鲨","ガブリアス"],[446,"Mampfaxo","Munchlax","먹고자","小卡比獸","小卡比兽","ゴンベ"],[447,"Riolu","Riolu","리오르","利歐路","利欧路","リオル"],[448,"Lucario","Lucario","루카리오","路卡利歐","路卡利欧","ルカリオ"],[449,"Hippopotas","Hippopotas","히포포타스","沙河馬","沙河马","ヒポポタス"],[450,"Hippoterus","Hippowdon","하마돈","河馬獸","河马兽","カバルドン"],[451,"Pionskora","Skorupi","스콜피","鉗尾蠍","钳尾蝎","スコルピ"],[452,"Piondragi","Drapion","드래피온","龍王蠍","龙王蝎","ドラピオン"],[453,"Glibunkel","Croagunk","삐딱구리","不良蛙","不良蛙","グレッグル"],[454,"Toxiquak","Toxicroak","독개굴","毒骷蛙","毒骷蛙","ドクロッグ"],[455,"Venuflibis","Carnivine","무스틈니","尖牙籠","尖牙笼","マスキッパ"],[456,"Finneon","Finneon","형광어","螢光魚","荧光鱼","ケイコウオ"],[457,"Lumineon","Lumineon","네오라이트","霓虹魚","霓虹鱼","ネオラント"],[458,"Mantirps","Mantyke","타만타","小球飛魚","小球飞鱼","タマンタ"],[459,"Shnebedeck","Snover","눈쓰개","雪笠怪","雪笠怪","ユキカブリ"],[460,"Rexblisar","Abomasnow","눈설왕","暴雪王","暴雪王","ユキノオー"],[461,"Snibunna","Weavile","포푸니라","瑪狃拉","玛狃拉","マニューラ"],[462,"Magnezone","Magnezone","자포코일","自爆磁怪","自爆磁怪","ジバコイル"],[463,"Schlurplek","Lickilicky","내룸벨트","大舌舔","大舌舔","ベロベルト"],[464,"Rihornior","Rhyperior","거대코뿌리","超甲狂犀","超甲狂犀","ドサイドン"],[465,"Tangoloss","Tangrowth","덩쿠림보","巨蔓藤","巨蔓藤","モジャンボ"],[466,"Elevoltek","Electivire","에레키블","電擊魔獸","电击魔兽","エレキブル"],[467,"Magbrant","Magmortar","마그마번","鴨嘴炎獸","鸭嘴炎兽","ブーバーン"],[468,"Togekiss","Togekiss","토게키스","波克基斯","波克基斯","トゲキッス"],[469,"Yanmega","Yanmega","메가자리","遠古巨蜓","远古巨蜓","メガヤンマ"],[470,"Folipurba","Leafeon","리피아","葉伊布","叶伊布","リーフィア"],[471,"Glaziola","Glaceon","글레이시아","冰伊布","冰伊布","グレイシア"],[472,"Skorgro","Gliscor","글라이온","天蠍王","天蝎王","グライオン"],[473,"Mamutel","Mamoswine","맘모꾸리","象牙豬","象牙猪","マンムー"],[474,"Porygon-Z","Porygon-Z","폴리곤Z","多邊獸Ｚ","多边兽乙型","ポリゴンＺ"],[475,"Galagladi","Gallade","엘레이드","艾路雷朵","艾路雷朵","エルレイド"],[476,"Voluminas","Probopass","대코파스","大朝北鼻","大朝北鼻","ダイノーズ"],[477,"Zwirrfinst","Dusknoir","야느와르몽","黑夜魔靈","黑夜魔灵","ヨノワール"],[478,"Frosdedje","Froslass","눈여아","雪妖女","雪妖女","ユキメノコ"],[479,"Rotom","Rotom","로토무","洛托姆","洛托姆","ロトム"],[480,"Selfe","Uxie","유크시","由克希","由克希","ユクシー"],[481,"Vesprit","Mesprit","엠라이트","艾姆利多","艾姆利多","エムリット"],[482,"Tobutz","Azelf","아그놈","亞克諾姆","亚克诺姆","アグノム"],[483,"Dialga","Dialga","디아루가","帝牙盧卡","帝牙卢卡","ディアルガ"],[484,"Palkia","Palkia","펄기아","帕路奇亞","帕路奇亚","パルキア"],[485,"Heatran","Heatran","히드런","席多藍恩","席多蓝恩","ヒードラン"],[486,"Regigigas","Regigigas","레지기가스","雷吉奇卡斯","雷吉奇卡斯","レジギガス"],[487,"Giratina","Giratina","기라티나","騎拉帝納","骑拉帝纳","ギラティナ"],[488,"Cresselia","Cresselia","크레세리아","克雷色利亞","克雷色利亚","クレセリア"],[489,"Phione","Phione","피오네","霏歐納","霏欧纳","フィオネ"],[490,"Manaphy","Manaphy","마나피","瑪納霏","玛纳霏","マナフィ"],[491,"Darkrai","Darkrai","다크라이","達克萊伊","达克莱伊","ダークライ"],[492,"Shaymin","Shaymin","쉐이미","謝米","谢米","シェイミ"],[493,"Arceus","Arceus","아르세우스","阿爾宙斯","阿尔宙斯","アルセウス"],[494,"Victini","Victini","비크티니","比克提尼","比克提尼","ビクティニ"],[495,"Serpifeu","Snivy","주리비얀","藤藤蛇","藤藤蛇","ツタージャ"],[496,"Efoserp","Servine","샤비","青藤蛇","青藤蛇","ジャノビー"],[497,"Serpiroyal","Serperior","샤로다","君主蛇","君主蛇","ジャローダ"],[498,"Floink","Tepig","뚜꾸리","暖暖豬","暖暖猪","ポカブ"],[499,"Ferkokel","Pignite","차오꿀","炒炒豬","炒炒猪","チャオブー"],[500,"Flambirex","Emboar","염무왕","炎武王","炎武王","エンブオー"],[501,"Ottaro","Oshawott","수댕이","水水獺","水水獭","ミジュマル"],[502,"Zwottronin","Dewott","쌍검자비","雙刃丸","双刃丸","フタチマル"],[503,"Admurai","Samurott","대검귀","大劍鬼","大剑鬼","ダイケンキ"],[504,"Nagelotz","Patrat","보르쥐","探探鼠","探探鼠","ミネズミ"],[505,"Kukmarda","Watchog","보르그","步哨鼠","步哨鼠","ミルホッグ"],[506,"Yorkleff","Lillipup","요테리","小約克","小约克","ヨーテリー"],[507,"Terribark","Herdier","하데리어","哈約克","哈约克","ハーデリア"],[508,"Bissbark","Stoutland","바랜드","長毛狗","长毛狗","ムーランド"],[509,"Felilou","Purrloin","쌔비냥","扒手貓","扒手猫","チョロネコ"],[510,"Kleoparda","Liepard","레파르다스","酷豹","酷豹","レパルダス"],[511,"Vegimak","Pansage","야나프","花椰猴","花椰猴","ヤナップ"],[512,"Vegichita","Simisage","야나키","花椰猿","花椰猿","ヤナッキー"],[513,"Grillmak","Pansear","바오프","爆香猴","爆香猴","バオップ"],[514,"Grillchita","Simisear","바오키","爆香猿","爆香猿","バオッキー"],[515,"Sodamak","Panpour","앗차프","冷水猴","冷水猴","ヒヤップ"],[516,"Sodachita","Simipour","앗차키","冷水猿","冷水猿","ヒヤッキー"],[517,"Somniam","Munna","몽나","食夢夢","食梦梦","ムンナ"],[518,"Somnivora","Musharna","몽얌나","夢夢蝕","梦梦蚀","ムシャーナ"],[519,"Dusselgurr","Pidove","콩둘기","豆豆鴿","豆豆鸽","マメパト"],[520,"Navitaub","Tranquill","유토브","咕咕鴿","咕咕鸽","ハトーボー"],[521,"Fasasnob","Unfezant","켄호로우","高傲雉雞","高傲雉鸡","ケンホロウ"],[522,"Elezeba","Blitzle","줄뮤마","斑斑馬","斑斑马","シママ"],[523,"Zebritz","Zebstrika","제브라이카","雷電斑馬","雷电斑马","ゼブライカ"],[524,"Kiesling","Roggenrola","단굴","石丸子","石丸子","ダンゴロ"],[525,"Sedimantur","Boldore","암트르","地幔岩","地幔岩","ガントル"],[526,"Brockoloss","Gigalith","기가이어스","龐岩怪","庞岩怪","ギガイアス"],[527,"Fleknoil","Woobat","또르박쥐","滾滾蝙蝠","滚滚蝙蝠","コロモリ"],[528,"Fletiamo","Swoobat","맘박쥐","心蝙蝠","心蝙蝠","ココロモリ"],[529,"Rotomurf","Drilbur","두더류","螺釘地鼠","螺钉地鼠","モグリュー"],[530,"Stalobor","Excadrill","몰드류","龍頭地鼠","龙头地鼠","ドリュウズ"],[531,"Ohrdoch","Audino","다부니","差不多娃娃","差不多娃娃","タブンネ"],[532,"Praktibalk","Timburr","으랏차","搬運小匠","搬运小匠","ドッコラー"],[533,"Strepoli","Gurdurr","토쇠골","鐵骨土人","铁骨土人","ドテッコツ"],[534,"Meistagrif","Conkeldurr","노보청","修建老匠","修建老匠","ローブシン"],[535,"Schallquap","Tympole","동챙이","圓蝌蚪","圆蝌蚪","オタマロ"],[536,"Mebrana","Palpitoad","두까비","藍蟾蜍","蓝蟾蜍","ガマガル"],[537,"Branawarz","Seismitoad","두빅굴","蟾蜍王","蟾蜍王","ガマゲロゲ"],[538,"Jiutesto","Throh","던지미","投摔鬼","投摔鬼","ナゲキ"],[539,"Karadonis","Sawk","타격귀","打擊鬼","打击鬼","ダゲキ"],[540,"Strawickl","Sewaddle","두르보","蟲寶包","虫宝包","クルミル"],[541,"Folikon","Swadloon","두르쿤","寶包繭","宝包茧","クルマユ"],[542,"Matrifol","Leavanny","모아머","保母蟲","保姆虫","ハハコモリ"],[543,"Toxiped","Venipede","마디네","百足蜈蚣","百足蜈蚣","フシデ"],[544,"Rollum","Whirlipede","휠구","車輪毬","车轮球","ホイーガ"],[545,"Cerapendra","Scolipede","펜드라","蜈蚣王","蜈蚣王","ペンドラー"],[546,"Waumboll","Cottonee","소미안","木棉球","木棉球","モンメン"],[547,"Elfun","Whimsicott","엘풍","風妖精","风妖精","エルフーン"],[548,"Lilminip","Petilil","치릴리","百合根娃娃","百合根娃娃","チュリネ"],[549,"Dressella","Lilligant","드레디어","裙兒小姐","裙儿小姐","ドレディア"],[550,"Barschuft","Basculin","배쓰나이","野蠻鱸魚","野蛮鲈鱼","バスラオ"],[551,"Ganovil","Sandile","깜눈크","黑眼鱷","黑眼鳄","メグロコ"],[552,"Rokkaiman","Krokorok","악비르","混混鱷","混混鳄","ワルビル"],[553,"Rabigator","Krookodile","악비아르","流氓鱷","流氓鳄","ワルビアル"],[554,"Flampion","Darumaka","달막화","火紅不倒翁","火红不倒翁","ダルマッカ"],[555,"Flampivian","Darmanitan","불비달마","達摩狒狒","达摩狒狒","ヒヒダルマ"],[556,"Maracamba","Maractus","마라카치","沙鈴仙人掌","沙铃仙人掌","マラカッチ"],[557,"Lithomith","Dwebble","돌살이","石居蟹","石居蟹","イシズマイ"],[558,"Castellith","Crustle","암팰리스","岩殿居蟹","岩殿居蟹","イワパレス"],[559,"Zurrokex","Scraggy","곤율랭","滑滑小子","滑滑小子","ズルッグ"],[560,"Irokex","Scrafty","곤율거니","頭巾混混","头巾混混","ズルズキン"],[561,"Symvolara","Sigilyph","심보러","象徵鳥","象征鸟","シンボラー"],[562,"Makabaja","Yamask","데스마스","哭哭面具","哭哭面具","デスマス"],[563,"Echnatoll","Cofagrigus","데스니칸","死神棺","迭失棺","デスカーン"],[564,"Galapaflos","Tirtouga","프로토가","原蓋海龜","原盖海龟","プロトーガ"],[565,"Karippas","Carracosta","늑골라","肋骨海龜","肋骨海龟","アバゴーラ"],[566,"Flapteryx","Archen","아켄","始祖小鳥","始祖小鸟","アーケン"],[567,"Aeropteryx","Archeops","아케오스","始祖大鳥","始祖大鸟","アーケオス"],[568,"Unratütox","Trubbish","깨봉이","破破袋","破破袋","ヤブクロン"],[569,"Deponitox","Garbodor","더스트나","灰塵山","灰尘山","ダストダス"],[570,"Zorua","Zorua","조로아","索羅亞","索罗亚","ゾロア"],[571,"Zoroark","Zoroark","조로아크","索羅亞克","索罗亚克","ゾロアーク"],[572,"Picochilla","Minccino","치라미","泡沫栗鼠","泡沫栗鼠","チラーミィ"],[573,"Chillabell","Cinccino","치라치노","奇諾栗鼠","奇诺栗鼠","チラチーノ"],[574,"Mollimorba","Gothita","고디탱","哥德寶寶","哥德宝宝","ゴチム"],[575,"Hypnomorba","Gothorita","고디보미","哥德小童","哥德小童","ゴチミル"],[576,"Morbitesse","Gothitelle","고디모아젤","哥德小姐","哥德小姐","ゴチルゼル"],[577,"Monozyto","Solosis","유니란","單卵細胞球","单卵细胞球","ユニラン"],[578,"Mitodos","Duosion","듀란","雙卵細胞球","双卵细胞球","ダブラン"],[579,"Zytomega","Reuniclus","란쿨루스","人造細胞卵","人造细胞卵","ランクルス"],[580,"Piccolente","Ducklett","꼬지보리","鴨寶寶","鸭宝宝","コアルヒー"],[581,"Swaroness","Swanna","스완나","舞天鵝","舞天鹅","スワンナ"],[582,"Gelatini","Vanillite","바닐프티","迷你冰","迷你冰","バニプッチ"],[583,"Gelatroppo","Vanillish","바닐리치","多多冰","多多冰","バニリッチ"],[584,"Gelatwino","Vanilluxe","배바닐라","雙倍多多冰","双倍多多冰","バイバニラ"],[585,"Sesokitz","Deerling","사철록","四季鹿","四季鹿","シキジカ"],[586,"Kronjuwild","Sawsbuck","바라철록","萌芽鹿","萌芽鹿","メブキジカ"],[587,"Emolga","Emolga","에몽가","電飛鼠","电飞鼠","エモンガ"],[588,"Laukaps","Karrablast","딱정곤","蓋蓋蟲","盖盖虫","カブルモ"],[589,"Cavalanzas","Escavalier","슈바르고","騎士蝸牛","骑士蜗牛","シュバルゴ"],[590,"Tarnpignon","Foongus","깜놀버슬","哎呀球菇","哎呀球菇","タマゲタケ"],[591,"Hutsassa","Amoonguss","뽀록나","敗露球菇","败露球菇","モロバレル"],[592,"Quabbel","Frillish","탱그릴","輕飄飄","轻飘飘","プルリル"],[593,"Apoquallyp","Jellicent","탱탱겔","胖嘟嘟","胖嘟嘟","ブルンゲル"],[594,"Mamolida","Alomomola","맘복치","保母曼波","保姆曼波","ママンボウ"],[595,"Wattzapf","Joltik","파쪼옥","電電蟲","电电虫","バチュル"],[596,"Voltula","Galvantula","전툴라","電蜘蛛","电蜘蛛","デンチュラ"],[597,"Kastadur","Ferroseed","철시드","種子鐵球","种子铁球","テッシード"],[598,"Tentantel","Ferrothorn","너트령","堅果啞鈴","坚果哑铃","ナットレイ"],[599,"Klikk","Klink","기어르","齒輪兒","齿轮儿","ギアル"],[600,"Kliklak","Klang","기기어르","齒輪組","齿轮组","ギギアル"],[601,"Klikdiklak","Klinklang","기기기어르","齒輪怪","齿轮怪","ギギギアル"],[602,"Zapplardin","Tynamo","저리어","麻麻小魚","麻麻小鱼","シビシラス"],[603,"Zapplalek","Eelektrik","저리릴","麻麻鰻","麻麻鳗","シビビール"],[604,"Zapplarang","Eelektross","저리더프","麻麻鰻魚王","麻麻鳗鱼王","シビルドン"],[605,"Pygraulon","Elgyem","리그레","小灰怪","小灰怪","リグレー"],[606,"Megalon","Beheeyem","벰크","大宇怪","大宇怪","オーベム"],[607,"Lichtel","Litwick","불켜미","燭光靈","烛光灵","ヒトモシ"],[608,"Laternecto","Lampent","램프라","燈火幽靈","灯火幽灵","ランプラー"],[609,"Skelabra","Chandelure","샹델라","水晶燈火靈","水晶灯火灵","シャンデラ"],[610,"Milza","Axew","터검니","牙牙","牙牙","キバゴ"],[611,"Sharfax","Fraxure","액슨도","斧牙龍","斧牙龙","オノンド"],[612,"Maxax","Haxorus","액스라이즈","雙斧戰龍","双斧战龙","オノノクス"],[613,"Petznief","Cubchoo","코고미","噴嚏熊","喷嚏熊","クマシュン"],[614,"Siberio","Beartic","툰베어","凍原熊","冻原熊","ツンベアー"],[615,"Frigometri","Cryogonal","프리지오","幾何雪花","几何雪花","フリージオ"],[616,"Schnuthelm","Shelmet","쪼마리","小嘴蝸","小嘴蜗","チョボマキ"],[617,"Hydragil","Accelgor","어지리더","敏捷蟲","敏捷虫","アギルダー"],[618,"Flunschlik","Stunfisk","메더","泥巴魚","泥巴鱼","マッギョ"],[619,"Lin-Fu","Mienfoo","비조푸","功夫鼬","功夫鼬","コジョフー"],[620,"Wie-Shu","Mienshao","비조도","師父鼬","师父鼬","コジョンド"],[621,"Shardrago","Druddigon","크리만","赤面龍","赤面龙","クリムガン"],[622,"Golbit","Golett","골비람","泥偶小人","泥偶小人","ゴビット"],[623,"Golgantes","Golurk","골루그","泥偶巨人","泥偶巨人","ゴルーグ"],[624,"Gladiantri","Pawniard","자망칼","駒刀小兵","驹刀小兵","コマタナ"],[625,"Caesurio","Bisharp","절각참","劈斬司令","劈斩司令","キリキザン"],[626,"Bisofank","Bouffalant","버프론","爆炸頭水牛","爆炸头水牛","バッフロン"],[627,"Geronimatz","Rufflet","수리둥보","毛頭小鷹","毛头小鹰","ワシボン"],[628,"Washakwil","Braviary","워글","勇士雄鷹","勇士雄鹰","ウォーグル"],[629,"Skallyk","Vullaby","벌차이","禿鷹丫頭","秃鹰丫头","バルチャイ"],[630,"Grypheldis","Mandibuzz","버랜지나","禿鷹娜","秃鹰娜","バルジーナ"],[631,"Furnifraß","Heatmor","앤티골","熔蟻獸","熔蚁兽","クイタラン"],[632,"Fermicula","Durant","아이앤트","鐵蟻","铁蚁","アイアント"],[633,"Kapuno","Deino","모노두","單首龍","单首龙","モノズ"],[634,"Duodino","Zweilous","디헤드","雙首暴龍","双首暴龙","ジヘッド"],[635,"Trikephalo","Hydreigon","삼삼드래","三首惡龍","三首恶龙","サザンドラ"],[636,"Ignivor","Larvesta","활화르바","燃燒蟲","燃烧虫","メラルバ"],[637,"Ramoth","Volcarona","불카모스","火神蛾","火神蛾","ウルガモス"],[638,"Kobalium","Cobalion","코바르온","勾帕路翁","勾帕路翁","コバルオン"],[639,"Terrakium","Terrakion","테라키온","代拉基翁","代拉基翁","テラキオン"],[640,"Viridium","Virizion","비리디온","畢力吉翁","毕力吉翁","ビリジオン"],[641,"Boreos","Tornadus","토네로스","龍捲雲","龙卷云","トルネロス"],[642,"Voltolos","Thundurus","볼트로스","雷電雲","雷电云","ボルトロス"],[643,"Reshiram","Reshiram","레시라무","萊希拉姆","莱希拉姆","レシラム"],[644,"Zekrom","Zekrom","제크로무","捷克羅姆","捷克罗姆","ゼクロム"],[645,"Demeteros","Landorus","랜드로스","土地雲","土地云","ランドロス"],[646,"Kyurem","Kyurem","큐레무","酋雷姆","酋雷姆","キュレム"],[647,"Keldeo","Keldeo","케르디오","凱路迪歐","凯路迪欧","ケルディオ"],[648,"Meloetta","Meloetta","메로엣타","美洛耶塔","美洛耶塔","メロエッタ"],[649,"Genesect","Genesect","게노세크트","蓋諾賽克特","盖诺赛克特","ゲノセクト"],[650,"Igamaro","Chespin","도치마론","哈力栗","哈力栗","ハリマロン"],[651,"Igastarnish","Quilladin","도치보구","胖胖哈力","胖胖哈力","ハリボーグ"],[652,"Brigaron","Chesnaught","브리가론","布里卡隆","布里卡隆","ブリガロン"],[653,"Fynx","Fennekin","푸호꼬","火狐狸","火狐狸","フォッコ"],[654,"Rutena","Braixen","테르나","長尾火狐","长尾火狐","テールナー"],[655,"Fennexis","Delphox","마폭시","妖火紅狐","妖火红狐","マフォクシー"],[656,"Froxy","Froakie","개구마르","呱呱泡蛙","呱呱泡蛙","ケロマツ"],[657,"Amphizel","Frogadier","개굴반장","呱頭蛙","呱头蛙","ゲコガシラ"],[658,"Quajutsu","Greninja","개굴닌자","甲賀忍蛙","甲贺忍蛙","ゲッコウガ"],[659,"Scoppel","Bunnelby","파르빗","掘掘兔","掘掘兔","ホルビー"],[660,"Grebbit","Diggersby","파르토","掘地兔","掘地兔","ホルード"],[661,"Dartiri","Fletchling","화살꼬빈","小箭雀","小箭雀","ヤヤコマ"],[662,"Dartignis","Fletchinder","불화살빈","火箭雀","火箭雀","ヒノヤコマ"],[663,"Fiaro","Talonflame","파이어로","烈箭鷹","烈箭鹰","ファイアロー"],[664,"Purmel","Scatterbug","분이벌레","粉蝶蟲","粉蝶虫","コフキムシ"],[665,"Puponcho","Spewpa","분떠도리","粉蝶蛹","粉蝶蛹","コフーライ"],[666,"Vivillon","Vivillon","비비용","彩粉蝶","彩粉蝶","ビビヨン"],[667,"Leufeo","Litleo","레오꼬","小獅獅","小狮狮","シシコ"],[668,"Pyroleo","Pyroar","화염레오","火炎獅","火炎狮","カエンジシ"],[669,"Flabébé","Flabébé","플라베베","花蓓蓓","花蓓蓓","フラベベ"],[670,"Floette","Floette","플라엣테","花葉蒂","花叶蒂","フラエッテ"],[671,"Florges","Florges","플라제스","花潔夫人","花洁夫人","フラージェス"],[672,"Mähikel","Skiddo","메이클","坐騎小羊","坐骑小羊","メェークル"],[673,"Chevrumm","Gogoat","고고트","坐騎山羊","坐骑山羊","ゴーゴート"],[674,"Pam-Pam","Pancham","판짱","頑皮熊貓","顽皮熊猫","ヤンチャム"],[675,"Pandagro","Pangoro","부란다","流氓熊貓","霸道熊猫","ゴロンダ"],[676,"Coiffwaff","Furfrou","트리미앙","多麗米亞","多丽米亚","トリミアン"],[677,"Psiau","Espurr","냐스퍼","妙喵","妙喵","ニャスパー"],[678,"Psiaugon","Meowstic","냐오닉스","超能妙喵","超能妙喵","ニャオニクス"],[679,"Gramokles","Honedge","단칼빙","獨劍鞘","独剑鞘","ヒトツキ"],[680,"Duokles","Doublade","쌍검킬","雙劍鞘","双剑鞘","ニダンギル"],[681,"Durengard","Aegislash","킬가르도","堅盾劍怪","坚盾剑怪","ギルガルド"],[682,"Parfi","Spritzee","슈쁘","粉香香","粉香香","シュシュプ"],[683,"Parfinesse","Aromatisse","프레프티르","芳香精","芳香精","フレフワン"],[684,"Flauschling","Swirlix","나룸퍼프","綿綿泡芙","绵绵泡芙","ペロッパフ"],[685,"Sabbaione","Slurpuff","나루림","胖甜妮","胖甜妮","ペロリーム"],[686,"Iscalar","Inkay","오케이징","好啦魷","好啦鱿","マーイーカ"],[687,"Calamanero","Malamar","칼라마네로","烏賊王","乌贼王","カラマネロ"],[688,"Bithora","Binacle","거북손손","龜腳腳","龟脚脚","カメテテ"],[689,"Thanathora","Barbaracle","거북손데스","龜足巨鎧","龟足巨铠","ガメノデス"],[690,"Algitt","Skrelp","수레기","垃垃藻","垃垃藻","クズモー"],[691,"Tandrak","Dragalge","드래캄","毒藻龍","毒藻龙","ドラミドロ"],[692,"Scampisto","Clauncher","완철포","鐵臂槍蝦","铁臂枪虾","ウデッポウ"],[693,"Wummer","Clawitzer","블로스터","鋼炮臂蝦","钢炮臂虾","ブロスター"],[694,"Eguana","Helioptile","목도리키텔","傘電蜥","伞电蜥","エリキテル"],[695,"Elezard","Heliolisk","일레도리자드","光電傘蜥","光电伞蜥","エレザード"],[696,"Balgoras","Tyrunt","티고라스","寶寶暴龍","宝宝暴龙","チゴラス"],[697,"Monargoras","Tyrantrum","견고라스","怪顎龍","怪颚龙","ガチゴラス"],[698,"Amarino","Amaura","아마루스","冰雪龍","冰雪龙","アマルス"],[699,"Amagarga","Aurorus","아마루르가","冰雪巨龍","冰雪巨龙","アマルルガ"],[700,"Feelinara","Sylveon","님피아","仙子伊布","仙子伊布","ニンフィア"],[701,"Resladero","Hawlucha","루차불","摔角鷹人","摔角鹰人","ルチャブル"],[702,"Dedenne","Dedenne","데덴네","咚咚鼠","咚咚鼠","デデンネ"],[703,"Rocara","Carbink","멜리시","小碎鑽","小碎钻","メレシー"],[704,"Viscora","Goomy","미끄메라","黏黏寶","黏黏宝","ヌメラ"],[705,"Viscargot","Sliggoo","미끄네일","黏美兒","黏美儿","ヌメイル"],[706,"Viscogon","Goodra","미끄래곤","黏美龍","黏美龙","ヌメルゴン"],[707,"Clavion","Klefki","클레피","鑰圈兒","钥圈儿","クレッフィ"],[708,"Paragoni","Phantump","나목령","小木靈","小木灵","ボクレー"],[709,"Trombork","Trevenant","대로트","朽木妖","朽木妖","オーロット"],[710,"Irrbis","Pumpkaboo","호바귀","南瓜精","南瓜精","バケッチャ"],[711,"Pumpdjinn","Gourgeist","펌킨인","南瓜怪人","南瓜怪人","パンプジン"],[712,"Arktip","Bergmite","꽁어름","冰寶","冰宝","カチコール"],[713,"Arktilas","Avalugg","크레베이스","冰岩怪","冰岩怪","クレベース"],[714,"eF-eM","Noibat","음뱃","嗡蝠","嗡蝠","オンバット"],[715,"UHaFnir","Noivern","음번","音波龍","音波龙","オンバーン"],[716,"Xerneas","Xerneas","제르네아스","哲爾尼亞斯","哲尔尼亚斯","ゼルネアス"],[717,"Yveltal","Yveltal","이벨타르","伊裴爾塔爾","伊裴尔塔尔","イベルタル"],[718,"Zygarde","Zygarde","지가르데","基格爾德","基格尔德","ジガルデ"],[719,"Diancie","Diancie","디안시","蒂安希","蒂安希","ディアンシー"],[720,"Hoopa","Hoopa","후파","胡帕","胡帕","フーパ"],[721,"Volcanion","Volcanion","볼케니온","波爾凱尼恩","波尔凯尼恩","ボルケニオン"],[722,"Bauz","Rowlet","나몰빼미","木木梟","木木枭","モクロー"],[723,"Arboretoss","Dartrix","빼미스로우","投羽梟","投羽枭","フクスロー"],[724,"Silvarro","Decidueye","모크나이퍼","狙射樹梟","狙射树枭","ジュナイパー"],[725,"Flamiau","Litten","냐오불","火斑喵","火斑喵","ニャビー"],[726,"Miezunder","Torracat","냐오히트","炎熱喵","炎热喵","ニャヒート"],[727,"Fuegro","Incineroar","어흥염","熾焰咆哮虎","炽焰咆哮虎","ガオガエン"],[728,"Robball","Popplio","누리공","球球海獅","球球海狮","アシマリ"],[729,"Marikeck","Brionne","키요공","花漾海獅","花漾海狮","オシャマリ"],[730,"Primarene","Primarina","누리레느","西獅海壬","西狮海壬","アシレーヌ"],[731,"Peppeck","Pikipek","콕코구리","小篤兒","小笃儿","ツツケラ"],[732,"Trompeck","Trumbeak","크라파","喇叭啄鳥","喇叭啄鸟","ケララッパ"],[733,"Tukanon","Toucannon","왕큰부리","銃嘴大鳥","铳嘴大鸟","ドデカバシ"],[734,"Mangunior","Yungoos","영구스","貓鼬少","猫鼬少","ヤングース"],[735,"Manguspektor","Gumshoos","형사구스","貓鼬探長","猫鼬探长","デカグース"],[736,"Mabula","Grubbin","턱지충이","強顎雞母蟲","强颚鸡母虫","アゴジムシ"],[737,"Akkup","Charjabug","전지충이","蟲電寶","虫电宝","デンヂムシ"],[738,"Donarion","Vikavolt","투구뿌논","鍬農炮蟲","锹农炮虫","クワガノン"],[739,"Krabbox","Crabrawler","오기지게","好勝蟹","好胜蟹","マケンカニ"],[740,"Krawell","Crabominable","모단단게","好勝毛蟹","好胜毛蟹","ケケンカニ"],[741,"Choreogel","Oricorio","춤추새","花舞鳥","花舞鸟","オドリドリ"],[742,"Wommel","Cutiefly","에블리","萌虻","萌虻","アブリー"],[743,"Bandelby","Ribombee","에리본","蝶結萌虻","蝶结萌虻","アブリボン"],[744,"Wuffels","Rockruff","암멍이","岩狗狗","岩狗狗","イワンコ"],[745,"Wolwerock","Lycanroc","루가루암","鬃岩狼人","鬃岩狼人","ルガルガン"],[746,"Lusardin","Wishiwashi","약어리","弱丁魚","弱丁鱼","ヨワシ"],[747,"Garstella","Mareanie","시마사리","好壞星","好坏星","ヒドイデ"],[748,"Aggrostella","Toxapex","더시마사리","超壞星","超坏星","ドヒドイデ"],[749,"Pampuli","Mudbray","머드나기","泥驢仔","泥驴仔","ドロバンコ"],[750,"Pampross","Mudsdale","만마드","重泥挽馬","重泥挽马","バンバドロ"],[751,"Araqua","Dewpider","물거미","滴蛛","滴蛛","シズクモ"],[752,"Aranestro","Araquanid","깨비물거미","滴蛛霸","滴蛛霸","オニシズクモ"],[753,"Imantis","Fomantis","짜랑랑","偽螳草","伪螳草","カリキリ"],[754,"Mantidea","Lurantis","라란티스","蘭螳花","兰螳花","ラランテス"],[755,"Bubungus","Morelull","자마슈","睡睡菇","睡睡菇","ネマシュ"],[756,"Lamellux","Shiinotic","마셰이드","燈罩夜菇","灯罩夜菇","マシェード"],[757,"Molunk","Salandit","야도뇽","夜盜火蜥","夜盗火蜥","ヤトウモリ"],[758,"Amfira","Salazzle","염뉴트","焰后蜥","焰后蜥","エンニュート"],[759,"Velursi","Stufful","포곰곰","童偶熊","童偶熊","ヌイコグマ"],[760,"Kosturso","Bewear","이븐곰","穿著熊","穿着熊","キテルグマ"],[761,"Frubberl","Bounsweet","달콤아","甜竹竹","甜竹竹","アマカジ"],[762,"Frubaila","Steenee","달무리나","甜舞妮","甜舞妮","アママイコ"],[763,"Fruyal","Tsareena","달코퀸","甜冷美后","甜冷美后","アマージョ"],[764,"Curelei","Comfey","큐아링","花療環環","花疗环环","キュワワー"],[765,"Kommandutan","Oranguru","하랑우탄","智揮猩","智挥猩","ヤレユータン"],[766,"Quartermak","Passimian","내던숭이","投擲猴","投掷猴","ナゲツケサル"],[767,"Reißlaus","Wimpod","꼬시레","膽小蟲","胆小虫","コソクムシ"],[768,"Tectass","Golisopod","갑주무사","具甲武者","具甲武者","グソクムシャ"],[769,"Sankabuh","Sandygast","모래꿍","沙丘娃","沙丘娃","スナバァ"],[770,"Colossand","Palossand","모래성이당","噬沙堡爺","噬沙堡爷","シロデスナ"],[771,"Gufa","Pyukumuku","해무기","拳海參","拳海参","ナマコブシ"],[772,"Typ:Null","Type: Null","타입:널","屬性：空","属性：空","タイプ：ヌル"],[773,"Amigento","Silvally","실버디","銀伴戰獸","银伴战兽","シルヴァディ"],[774,"Meteno","Minior","메테노","小隕星","小陨星","メテノ"],[775,"Koalelu","Komala","자말라","樹枕尾熊","树枕尾熊","ネッコアラ"],[776,"Tortunator","Turtonator","폭거북스","爆焰龜獸","爆焰龟兽","バクガメス"],[777,"Togedemaru","Togedemaru","토게데마루","托戈德瑪爾","托戈德玛尔","トゲデマル"],[778,"Mimigma","Mimikyu","따라큐","謎擬Ｑ","谜拟丘","ミミッキュ"],[779,"Knirfish","Bruxish","치갈기","磨牙彩皮魚","磨牙彩皮鱼","ハギギシリ"],[780,"Sen-Long","Drampa","할비롱","老翁龍","老翁龙","ジジーロン"],[781,"Moruda","Dhelmise","타타륜","破破舵輪","破破舵轮","ダダリン"],[782,"Miniras","Jangmo-o","짜랑꼬","心鱗寶","心鳞宝","ジャラコ"],[783,"Mediras","Hakamo-o","짜랑고우","鱗甲龍","鳞甲龙","ジャランゴ"],[784,"Grandiras","Kommo-o","짜랑고우거","杖尾鱗甲龍","杖尾鳞甲龙","ジャラランガ"],[785,"Kapu-Riki","Tapu Koko","카푸꼬꼬꼭","卡璞・鳴鳴","卡璞・鸣鸣","カプ・コケコ"],[786,"Kapu-Fala","Tapu Lele","카푸나비나","卡璞・蝶蝶","卡璞・蝶蝶","カプ・テテフ"],[787,"Kapu-Toro","Tapu Bulu","카푸브루루","卡璞・哞哞","卡璞・哞哞","カプ・ブルル"],[788,"Kapu-Kime","Tapu Fini","카푸느지느","卡璞・鰭鰭","卡璞・鳍鳍","カプ・レヒレ"],[789,"Cosmog","Cosmog","코스모그","科斯莫古","科斯莫古","コスモッグ"],[790,"Cosmovum","Cosmoem","코스모움","科斯莫姆","科斯莫姆","コスモウム"],[791,"Solgaleo","Solgaleo","솔가레오","索爾迦雷歐","索尔迦雷欧","ソルガレオ"],[792,"Lunala","Lunala","루나아라","露奈雅拉","露奈雅拉","ルナアーラ"],[793,"Anego","Nihilego","텅비드","虛吾伊德","虚吾伊德","ウツロイド"],[794,"Masskito","Buzzwole","매시붕","爆肌蚊","爆肌蚊","マッシブーン"],[795,"Schabelle","Pheromosa","페로코체","費洛美螂","费洛美螂","フェローチェ"],[796,"Voltriant","Xurkitree","전수목","電束木","电束木","デンジュモク"],[797,"Kaguron","Celesteela","철화구야","鐵火輝夜","铁火辉夜","テッカグヤ"],[798,"Katagami","Kartana","종이신도","紙御劍","纸御剑","カミツルギ"],[799,"Schlingking","Guzzlord","악식킹","惡食大王","恶食大王","アクジキング"],[800,"Necrozma","Necrozma","네크로즈마","奈克洛茲瑪","奈克洛兹玛","ネクロズマ"],[801,"Magearna","Magearna","마기아나","瑪機雅娜","玛机雅娜","マギアナ"],[802,"Marshadow","Marshadow","마샤도","瑪夏多","玛夏多","マーシャドー"],[803,"Venicro","Poipole","베베놈","毒貝比","毒贝比","ベベノム"],[804,"Agoyon","Naganadel","아고용","四顎針龍","四颚针龙","アーゴヨン"],[805,"Muramura","Stakataka","차곡차곡","壘磊石","垒磊石","ツンデツンデ"],[806,"Kopplosio","Blacephalon","두파팡","砰頭小丑","砰头小丑","ズガドーン"],[807,"Zeraora","Zeraora","제라오라","捷拉奧拉","捷拉奥拉","ゼラオラ"],[808,"Meltan","Meltan","멜탄","美錄坦","美录坦","メルタン"],[809,"Melmetal","Melmetal","멜메탈","美錄梅塔","美录梅塔","メルメタル"],[810,"Chimpep","Grookey","흥나숭","敲音猴","敲音猴","サルノリ"],[811,"Chimstix","Thwackey","채키몽","啪咚猴","啪咚猴","バチンキー"],[812,"Gortrom","Rillaboom","고릴타","轟擂金剛猩","轰擂金刚猩","ゴリランダー"],[813,"Hopplo","Scorbunny","염버니","炎兔兒","炎兔儿","ヒバニー"],[814,"Kickerlo","Raboot","래비풋","騰蹴小將","腾蹴小将","ラビフット"],[815,"Liberlo","Cinderace","에이스번","閃焰王牌","闪焰王牌","エースバーン"],[816,"Memmeon","Sobble","울머기","淚眼蜥","泪眼蜥","メッソン"],[817,"Phlegleon","Drizzile","누겔레온","變澀蜥","变涩蜥","ジメレオン"],[818,"Intelleon","Inteleon","인텔리레온","千面避役","千面避役","インテレオン"],[819,"Raffel","Skwovet","탐리스","貪心栗鼠","贪心栗鼠","ホシガリス"],[820,"Schlaraffel","Greedent","요씽리스","藏飽栗鼠","藏饱栗鼠","ヨクバリス"],[821,"Meikro","Rookidee","파라꼬","稚山雀","稚山雀","ココガラ"],[822,"Kranoviz","Corvisquire","파크로우","藍鴉","蓝鸦","アオガラス"],[823,"Krarmor","Corviknight","아머까오","鋼鎧鴉","钢铠鸦","アーマーガア"],[824,"Sensect","Blipbug","두루지벌레","索偵蟲","索侦虫","サッチムシ"],[825,"Keradar","Dottler","레돔벌레","天罩蟲","天罩虫","レドームシ"],[826,"Maritellit","Orbeetle","이올브","以歐路普","以欧路普","イオルブ"],[827,"Kleptifux","Nickit","훔처우","偷兒狐","狡小狐","クスネ"],[828,"Gaunux","Thievul","폭슬라이","狐大盜","猾大狐","フォクスライ"],[829,"Cottini","Gossifleur","꼬모카","幼棉棉","幼棉棉","ヒメンカ"],[830,"Cottomi","Eldegoss","백솜모카","白蓬蓬","白蓬蓬","ワタシラガ"],[831,"Wolly","Wooloo","우르","毛辮羊","毛辫羊","ウールー"],[832,"Zwollock","Dubwool","배우르","毛毛角羊","毛毛角羊","バイウールー"],[833,"Kamehaps","Chewtle","깨물부기","咬咬龜","咬咬龟","カムカメ"],[834,"Kamalm","Drednaw","갈가부기","暴噬龜","暴噬龟","カジリガメ"],[835,"Voldi","Yamper","멍파치","來電汪","来电汪","ワンパチ"],[836,"Bellektro","Boltund","펄스멍","逐電犬","逐电犬","パルスワン"],[837,"Klonkett","Rolycoly","탄동","小炭仔","小炭仔","タンドン"],[838,"Wagong","Carkol","탄차곤","大炭車","大炭车","トロッゴン"],[839,"Montecarbo","Coalossal","석탄산","巨炭山","巨炭山","セキタンザン"],[840,"Knapfel","Applin","과사삭벌레","啃果蟲","啃果虫","カジッチュ"],[841,"Drapfel","Flapple","애프룡","蘋裹龍","苹裹龙","アップリュー"],[842,"Schlapfel","Appletun","단지래플","豐蜜龍","丰蜜龙","タルップル"],[843,"Salanga","Silicobra","모래뱀","沙包蛇","沙包蛇","スナヘビ"],[844,"Sanaconda","Sandaconda","사다이사","沙螺蟒","沙螺蟒","サダイジャ"],[845,"Urgl","Cramorant","윽우지","古月鳥","古月鸟","ウッウ"],[846,"Pikuda","Arrokuda","찌로꼬치","刺梭魚","刺梭鱼","サシカマス"],[847,"Barrakiefa","Barraskewda","꼬치조","戽斗尖梭","戽斗尖梭","カマスジョー"],[848,"Toxel","Toxel","일레즌","毒電嬰","电音婴","エレズン"],[849,"Riffex","Toxtricity","스트린더","顫弦蠑螈","颤弦蝾螈","ストリンダー"],[850,"Thermopod","Sizzlipede","태우지네","燒火蚣","烧火蚣","ヤクデ"],[851,"Infernopod","Centiskorch","다태우지네","焚焰蚣","焚焰蚣","マルヤクデ"],[852,"Klopptopus","Clobbopus","때때무노","拳拳蛸","拳拳蛸","タタッコ"],[853,"Kaocto","Grapploct","케오퍼스","八爪武師","八爪武师","オトスパス"],[854,"Fatalitee","Sinistea","데인차","來悲茶","来悲茶","ヤバチャ"],[855,"Mortipot","Polteageist","포트데스","怖思壺","怖思壶","ポットデス"],[856,"Brimova","Hatenna","몸지브림","迷布莉姆","迷布莉姆","ミブリム"],[857,"Brimano","Hattrem","손지브림","提布莉姆","提布莉姆","テブリム"],[858,"Silembrim","Hatterene","브리무음","布莉姆溫","布莉姆温","ブリムオン"],[859,"Bähmon","Impidimp","메롱꿍","搗蛋小妖","捣蛋小妖","ベロバー"],[860,"Pelzebub","Morgrem","쏘겨모","詐唬魔","诈唬魔","ギモー"],[861,"Olangaar","Grimmsnarl","오롱털","長毛巨魔","长毛巨魔","オーロンゲ"],[862,"Barrikadax","Obstagoon","가로막구리","堵攔熊","堵拦熊","タチフサグマ"],[863,"Mauzinger","Perrserker","나이킹","喵頭目","喵头目","ニャイキング"],[864,"Gorgasonn","Cursola","산호르곤","魔靈珊瑚","魔灵珊瑚","サニゴーン"],[865,"Lauchzelot","Sirfetch’d","창파나이트","蔥遊兵","葱游兵","ネギガナイト"],[866,"Pantifrost","Mr. Rime","마임꽁꽁","踏冰人偶","踏冰人偶","バリコオル"],[867,"Oghnatoll","Runerigus","데스판","死神板","迭失板","デスバーン"],[868,"Hokumil","Milcery","마빌크","小仙奶","小仙奶","マホミル"],[869,"Pokusan","Alcremie","마휘핑","霜奶仙","霜奶仙","マホイップ"],[870,"Legios","Falinks","대여르","列陣兵","列阵兵","タイレーツ"],[871,"Britzigel","Pincurchin","찌르성게","啪嚓海膽","啪嚓海胆","バチンウニ"],[872,"Snomnom","Snom","누니머기","雪吞蟲","雪吞虫","ユキハミ"],[873,"Mottineva","Frosmoth","모스노우","雪絨蛾","雪绒蛾","モスノウ"],[874,"Humanolith","Stonjourner","돌헨진","巨石丁","巨石丁","イシヘンジン"],[875,"Kubuin","Eiscue","빙큐보","冰砌鵝","冰砌鹅","コオリッポ"],[876,"Servol","Indeedee","에써르","愛管侍","爱管侍","イエッサン"],[877,"Morpeko","Morpeko","모르페코","莫魯貝可","莫鲁贝可","モルペコ"],[878,"Kupfanti","Cufant","끼리동","銅象","铜象","ゾウドウ"],[879,"Patinaraja","Copperajah","대왕끼리동","大王銅象","大王铜象","ダイオウドウ"],[880,"Lectragon","Dracozolt","파치래곤","雷鳥龍","雷鸟龙","パッチラゴン"],[881,"Lecryodon","Arctozolt","파치르돈","雷鳥海獸","雷鸟海兽","パッチルドン"],[882,"Pescragon","Dracovish","어래곤","鰓魚龍","鳃鱼龙","ウオノラゴン"],[883,"Pescryodon","Arctovish","어치르돈","鰓魚海獸","鳃鱼海兽","ウオチルドン"],[884,"Duraludon","Duraludon","두랄루돈","鋁鋼龍","铝钢龙","ジュラルドン"],[885,"Grolldra","Dreepy","드라꼰","多龍梅西亞","多龙梅西亚","ドラメシヤ"],[886,"Phandra","Drakloak","드래런치","多龍奇","多龙奇","ドロンチ"],[887,"Katapuldra","Dragapult","드래펄트","多龍巴魯托","多龙巴鲁托","ドラパルト"],[888,"Zacian","Zacian","자시안","蒼響","苍响","ザシアン"],[889,"Zamazenta","Zamazenta","자마젠타","藏瑪然特","藏玛然特","ザマゼンタ"],[890,"Endynalos","Eternatus","무한다이노","無極汰那","无极汰那","ムゲンダイナ"],[891,"Dakuma","Kubfu","치고마","熊徒弟","熊徒弟","ダクマ"],[892,"Wulaosu","Urshifu","우라오스","武道熊師","武道熊师","ウーラオス"],[893,"Zarude","Zarude","자루도","薩戮德","萨戮德","ザルード"],[894,"Regieleki","Regieleki","레지에레키","雷吉艾勒奇","雷吉艾勒奇","レジエレキ"],[895,"Regidrago","Regidrago","레지드래고","雷吉鐸拉戈","雷吉铎拉戈","レジドラゴ"],[896,"Polaross","Glastrier","블리자포스","雪暴馬","雪暴马","ブリザポス"],[897,"Phantoross","Spectrier","레이스포스","靈幽馬","灵幽马","レイスポス"],[898,"Coronospa","Calyrex","버드렉스","蕾冠王","蕾冠王","バドレックス"],[899,"Damythir","Wyrdeer","신비록","詭角鹿","诡角鹿","アヤシシ"],[900,"Axantor","Kleavor","사마자르","劈斧螳螂","劈斧螳螂","バサギリ"],[901,"Ursaluna","Ursaluna","다투곰","月月熊","月月熊","ガチグマ"],[902,"Salmagnis","Basculegion","대쓰여너","幽尾玄魚","幽尾玄鱼","イダイトウ"],[903,"Snieboss","Sneasler","포푸니크","大狃拉","大狃拉","オオニューラ"],[904,"Myriador","Overqwil","장침바루","萬針魚","万针鱼","ハリーマン"],[905,"Cupidos","Enamorus","러브로스","眷戀雲","眷恋云","ラブトロス"],[906,"Felori","Sprigatito","나오하","新葉喵","新叶喵","ニャオハ"],[907,"Feliospa","Floragato","나로테","蒂蕾喵","蒂蕾喵","ニャローテ"],[908,"Maskagato","Meowscarada","마스카나","魔幻假面喵","魔幻假面喵","マスカーニャ"],[909,"Krokel","Fuecoco","뜨아거","呆火鱷","呆火鳄","ホゲータ"],[910,"Lokroko","Crocalor","악뜨거","炙燙鱷","炙烫鳄","アチゲータ"],[911,"Skelokrok","Skeledirge","라우드본","骨紋巨聲鱷","骨纹巨声鳄","ラウドボーン"],[912,"Kwaks","Quaxly","꾸왁스","潤水鴨","润水鸭","クワッス"],[913,"Fuentente","Quaxwell","아꾸왁","湧躍鴨","涌跃鸭","ウェルカモ"],[914,"Bailonda","Quaquaval","웨이니발","狂歡浪舞鴨","狂欢浪舞鸭","ウェーニバル"],[915,"Ferkuli","Lechonk","맛보돈","愛吃豚","爱吃豚","グルトン"],[916,"Fragrunz","Oinkologne","퍼퓨돈","飄香豚","飘香豚","パフュートン"],[917,"Tarundel","Tarountula","타랜툴라","團珠蛛","团珠蛛","タマンチュラ"],[918,"Spinsidias","Spidops","트래피더","操陷蛛","操陷蛛","ワナイダー"],[919,"Micrick","Nymble","콩알뚜기","豆蟋蟀","豆蟋蟀","マメバッタ"],[920,"Lextremo","Lokix","엑스레그","烈腿蝗","烈腿蝗","エクスレッグ"],[921,"Pamo","Pawmi","빠모","布撥","布拨","パモ"],[922,"Pamamo","Pawmo","빠모트","布土撥","布土拨","パモット"],[923,"Pamomamo","Pawmot","빠르모트","巴布土撥","巴布土拨","パーモット"],[924,"Zwieps","Tandemaus","두리쥐","一對鼠","一对鼠","ワッカネズミ"],[925,"Famieps","Maushold","파밀리쥐","一家鼠","一家鼠","イッカネズミ"],[926,"Hefel","Fidough","쫀도기","狗仔包","狗仔包","パピモッチ"],[927,"Backel","Dachsbun","바우첼","麻花犬","麻花犬","バウッツェル"],[928,"Olini","Smoliv","미니브","迷你芙","迷你芙","ミニーブ"],[929,"Olivinio","Dolliv","올리뇨","奧利紐","奥利纽","オリーニョ"],[930,"Olithena","Arboliva","올리르바","奧利瓦","奥利瓦","オリーヴァ"],[931,"Krawalloro","Squawkabilly","시비꼬","怒鸚哥","怒鹦哥","イキリンコ"],[932,"Geosali","Nacli","베베솔트","鹽石寶","盐石宝","コジオ"],[933,"Sedisal","Naclstack","스태솔트","鹽石壘","盐石垒","ジオヅム"],[934,"Saltigant","Garganacl","콜로솔트","鹽石巨靈","盐石巨灵","キョジオーン"],[935,"Knarbon","Charcadet","카르본","炭小侍","炭小侍","カルボウ"],[936,"Crimanzo","Armarouge","카디나르마","紅蓮鎧騎","红莲铠骑","グレンアルマ"],[937,"Azugladis","Ceruledge","파라블레이즈","蒼炎刃鬼","苍炎刃鬼","ソウブレイズ"],[938,"Blipp","Tadbulb","빈나두","光蚪仔","光蚪仔","ズピカ"],[939,"Wampitz","Bellibolt","찌리배리","電肚蛙","电肚蛙","ハラバリー"],[940,"Voltrel","Wattrel","찌리비","電海燕","电海燕","カイデン"],[941,"Voltrean","Kilowattrel","찌리비크","大電海燕","大电海燕","タイカイデン"],[942,"Mobtiff","Maschiff","오라티프","偶叫獒","偶叫獒","オラチフ"],[943,"Mastifioso","Mabosstiff","마피티프","獒教父","獒教父","マフィティフ"],[944,"Sproxi","Shroodle","땃쭈르","滋汁鼴","滋汁鼹","シルシュルー"],[945,"Affiti","Grafaiai","태깅구르","塗標客","涂标客","タギングル"],[946,"Weherba","Bramblin","그푸리","納噬草","纳噬草","アノクサ"],[947,"Horrerba","Brambleghast","공푸리","怖納噬草","怖纳噬草","アノホラグサ"],[948,"Tentagra","Toedscool","들눈해","原野水母","原野水母","ノノクラゲ"],[949,"Tenterra","Toedscruel","육파리","陸地水母","陆地水母","リククラゲ"],[950,"Klibbe","Klawf","절벼게","毛崖蟹","毛崖蟹","ガケガニ"],[951,"Chilingel","Capsakid","캡싸이","熱辣娃","热辣娃","カプサイジ"],[952,"Halupenjo","Scovillain","스코빌런","狠辣椒","狠辣椒","スコヴィラン"],[953,"Relluk","Rellor","구르데","蟲滾泥","虫滚泥","シガロコ"],[954,"Skarabaks","Rabsca","베라카스","蟲甲聖","虫甲圣","ベラカス"],[955,"Flattutu","Flittle","하느라기","飄飄雛","飘飘雏","ヒラヒナ"],[956,"Psiopatra","Espathra","클레스퍼트라","超能艷鴕","超能艳鸵","クエスパトラ"],[957,"Forgita","Tinkatink","어리짱","小鍛匠","小锻匠","カヌチャン"],[958,"Tafforgita","Tinkatuff","벼리짱","巧鍛匠","巧锻匠","ナカヌチャン"],[959,"Granforgita","Tinkaton","두드리짱","巨鍛匠","巨锻匠","デカヌチャン"],[960,"Schligda","Wiglett","바다그다","海地鼠","海地鼠","ウミディグダ"],[961,"Schligdri","Wugtrio","바닥트리오","三海地鼠","三海地鼠","ウミトリオ"],[962,"Adebom","Bombirdier","떨구새","下石鳥","下石鸟","オトシドリ"],[963,"Normifin","Finizen","맨돌핀","波普海豚","波普海豚","ナミイルカ"],[964,"Delfinator","Palafin","돌핀맨","海豚俠","海豚侠","イルカマン"],[965,"Knattox","Varoom","부르롱","噗隆隆","噗隆隆","ブロロン"],[966,"Knattatox","Revavroom","부르르룸","普隆隆姆","普隆隆姆","ブロロローム"],[967,"Mopex","Cyclizar","모토마","摩托蜥","摩托蜥","モトトカゲ"],[968,"Schlurm","Orthworm","꿈트렁","拖拖蚓","拖拖蚓","ミミズズ"],[969,"Lumispross","Glimmet","초롱순","晶光芽","晶光芽","キラーメ"],[970,"Lumiflora","Glimmora","킬라플로르","晶光花","晶光花","キラフロル"],[971,"Gruff","Greavard","망망이","墓仔狗","墓仔狗","ボチ"],[972,"Friedwuff","Houndstone","묘두기","墓揚犬","墓扬犬","ハカドッグ"],[973,"Flaminkno","Flamigo","꼬이밍고","纏紅鶴","纏红鹤","カラミンゴ"],[974,"Flaniwal","Cetoddle","터벅고래","走鯨","走鲸","アルクジラ"],[975,"Kolowal","Cetitan","우락고래","浩大鯨","浩大鲸","ハルクジラ"],[976,"Agiluza","Veluza","가비루사","輕身鱈","轻身鳕","ミガルーサ"],[977,"Heerashai","Dondozo","어써러셔","吃吼霸","吃吼霸","ヘイラッシャ"],[978,"Nigiragi","Tatsugiri","싸리용","米立龍","米立龙","シャリタツ"],[979,"Epitaff","Annihilape","저승갓숭","棄世猴","弃世猴","コノヨザル"],[980,"Suelord","Clodsire","토오","土王","土王","ドオー"],[981,"Farigiraf","Farigiraf","키키링","奇麒麟","奇麒麟","リキキリン"],[982,"Dummimisel","Dudunsparce","노고고치","土龍節節","土龙节节","ノココッチ"],[983,"Gladimperio","Kingambit","대도각참","仆刀將軍","仆刀将军","ドドゲザン"],[984,"Riesenzahn","Great Tusk","위대한엄니","雄偉牙","雄伟牙","イダイナキバ"],[985,"Brüllschweif","Scream Tail","우렁찬꼬리","吼叫尾","吼叫尾","サケブシッポ"],[986,"Wutpilz","Brute Bonnet","사나운버섯","猛惡菇","猛恶菇","アラブルタケ"],[987,"Flatterhaar","Flutter Mane","날개치는머리","振翼髮","振翼发","ハバタクカミ"],[988,"Kriechflügel","Slither Wing","땅을기는날개","爬地翅","爬地翅","チヲハウハネ"],[989,"Sandfell","Sandy Shocks","모래털가죽","沙鐵皮","沙铁皮","スナノケガワ"],[990,"Eisenrad","Iron Treads","무쇠바퀴","鐵轍跡","铁轍迹","テツノワダチ"],[991,"Eisenbündel","Iron Bundle","무쇠보따리","鐵包袱","铁包袱","テツノツツミ"],[992,"Eisenhand","Iron Hands","무쇠손","鐵臂膀","铁臂膀","テツノカイナ"],[993,"Eisenhals","Iron Jugulis","무쇠머리","鐵脖頸","铁脖颈","テツノコウベ"],[994,"Eisenfalter","Iron Moth","무쇠독나방","鐵毒蛾","铁毒蛾","テツノドクガ"],[995,"Eisendorn","Iron Thorns","무쇠가시","鐵荊棘","铁荆棘","テツノイバラ"],[996,"Frospino","Frigibax","드니차","涼脊龍","凉脊龙","セビエ"],[997,"Cryospino","Arctibax","드니꽁","凍脊龍","冻脊龙","セゴール"],[998,"Espinodon","Baxcalibur","드닐레이브","戟脊龍","戟脊龙","セグレイブ"],[999,"Gierspenst","Gimmighoul","모으령","索財靈","索财灵","コレクレー"],[1000,"Monetigo","Gholdengo","타부자고","賽富豪","赛富豪","サーフゴー"],[1001,"Chongjian","Wo-Chien","총지엔","古簡蝸","古简蜗","チオンジェン"],[1002,"Baojian","Chien-Pao","파오젠","古劍豹","古剑豹","パオジアン"],[1003,"Dinglu","Ting-Lu","딩루","古鼎鹿","古鼎鹿","ディンルー"],[1004,"Yuyu","Chi-Yu","위유이","古玉魚","古玉鱼","イーユイ"],[1005,"Donnersichel","Roaring Moon","고동치는달","轟鳴月","轰鸣月","トドロクツキ"],[1006,"Eisenkrieger","Iron Valiant","무쇠무인","鐵武者","铁武者","テツノブジン"],[1007,"Koraidon","Koraidon","코라이돈","故勒頓","故勒顿","コライドン"],[1008,"Miraidon","Miraidon","미라이돈","密勒頓","密勒顿","ミライドン"],[1009,"Windewoge","Walking Wake","굽이치는물결","波盪水","波荡水","ウネルミナモ"],[1010,"Eisenblatt","Iron Leaves","무쇠잎새","鐵斑葉","铁斑叶","テツノイサハ"],[1011,"Sirapfel","Dipplin","과미르","裹蜜蟲","裹蜜虫","カミッチュ"],[1012,"Mortcha","Poltchageist","차데스","斯魔茶","斯魔茶","チャデス"],[1013,"Fatalitcha","Sinistcha","그우린차","來悲粗茶","来悲粗茶","ヤバソチャ"],[1014,"Boninu","Okidogi","조타구","夠讚狗","够赞狗","イイネイヌ"],[1015,"Benesaru","Munkidori","이야후","願增猿","愿增猿","マシマシラ"],[1016,"Beatori","Fezandipiti","기로치","吉雉雞","吉雉鸡","キチキギス"],[1017,"Ogerpon","Ogerpon","오거폰","厄鬼椪","厄诡椪","オーガポン"],[1018,"Briduradon","Archaludon","브리두라스","鋁鋼橋龍","铝钢桥龙","ブリジュラス"],[1019,"Hydrapfel","Hydrapple","과미드라","蜜集大蛇","蜜集大蛇","カミツオロチ"],[1020,"Keilflamme","Gouging Fire","꿰뚫는화염","破空焰","破空焰","ウガツホムラ"],[1021,"Furienblitz","Raging Bolt","날뛰는우레","猛雷鼓","猛雷鼓","タケルライコ"],[1022,"Eisenfels","Iron Boulder","무쇠암석","鐵磐岩","铁磐岩","テツノイワオ"],[1023,"Eisenhaupt","Iron Crown","무쇠감투","鐵頭殼","铁头壳","テツノカシラ"],[1024,"Terapagos","Terapagos","테라파고스","太樂巴戈斯","太乐巴戈斯","テラパゴス"],[1025,"Infamomo","Pecharunt","복숭악동","桃歹郎","桃歹郎","モモワロウ"]]</script>
 <script src="firebase-config.js"></script>
 <script src="sync.js"></script>
 <script>
