@@ -127,6 +127,23 @@ input[type=number]{width:130px}
 .kindtitle[hidden]{display:none}
 .menu{position:relative;flex:0 0 auto}
 .menubtn{width:46px;height:46px;font-size:1.4rem;line-height:1;padding:0;display:flex;align-items:center;justify-content:center}
+.statbtn svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+#statWrap .sheet>*{flex:0 0 auto}
+.sthead{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.st-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.st-kpi{background:var(--surface2);border-radius:12px;padding:10px 12px;min-width:0}
+.st-kpi b{display:block;font-size:1.15rem;overflow-wrap:anywhere}
+.st-kpi span{font-size:.78rem;color:var(--muted)}
+.st-h{margin:14px 0 4px;font-size:.76rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.st-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 10px;align-items:baseline;font-size:.9rem;padding:4px 0}
+.st-row .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.st-row .vl{font-variant-numeric:tabular-nums;white-space:nowrap}
+.st-bar{grid-column:1/-1;height:6px;border-radius:3px;background:var(--surface2);overflow:hidden}
+.st-bar i{display:block;height:100%;background:var(--accent);border-radius:3px}
+.st-spark{width:100%;height:56px;display:block}
+.st-spark path{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
+.st-fun{background:var(--accent-soft);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;font-size:.9rem}
+.st-up{color:var(--ok)}.st-down{color:var(--danger)}
 .menupanel{position:absolute;right:0;top:calc(100% + 6px);z-index:30;width:min(300px,calc(100vw - 32px));background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 10px 32px rgba(0,0,0,.2);padding:6px;display:flex;flex-direction:column}
 .menupanel[hidden]{display:none}
 .mitem{display:block;width:100%;text-align:left;border:0;background:none;padding:11px 12px;border-radius:9px;color:var(--ink);cursor:pointer}
@@ -326,6 +343,7 @@ input[type=number]{width:130px}
           <span id="manageName" hidden></span>
         </div>
         <h2 id="kindTitle" class="kindtitle" hidden>Wunschliste</h2>
+        <button class="btn menubtn statbtn" id="statBtn" type="button" aria-label="Statistik" title="Statistik"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></button>
         <div class="menu">
           <button class="btn menubtn" id="menuBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="menuPanel" aria-label="Weitere Aktionen">⋯</button>
           <div id="menuPanel" class="menupanel" hidden>
@@ -466,6 +484,13 @@ input[type=number]{width:130px}
 
 <input id="photoFile" type="file" accept="image/*" hidden>
 
+<div id="statWrap" class="sheetwrap" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="statTitle">
+    <div class="sthead"><h2 id="statTitle">Statistik</h2><button class="btn small" id="statClose" type="button">Schließen</button></div>
+    <div id="statScope" class="seg" role="group" aria-label="Umfang" hidden></div>
+    <div id="statBody"></div>
+  </div>
+</div>
 <div id="cstWrap" class="sheetwrap" hidden>
   <form id="cstForm" class="sheet" role="dialog" aria-modal="true" aria-labelledby="cstTitle" novalidate>
     <h2 id="cstTitle">Eigene Karte hinzufügen</h2>
@@ -476,6 +501,8 @@ input[type=number]{width:130px}
       <select id="cstSet"></select>
     </label>
     <label class="f" id="cstSetFreeRow" hidden>Name des Sets<input id="cstSetFree" type="text" maxlength="80" autocomplete="off"></label>
+    <div id="cstFreeHint" class="meta" hidden></div>
+    <label class="f" id="cstTotalRow" hidden>Anzahl Karten im Set (optional)<input id="cstTotal" type="number" min="1" max="9999" inputmode="numeric" placeholder="zum Beispiel 78"></label>
     <label class="f">Kartennummer<input id="cstNum" type="text" maxlength="12" placeholder="zum Beispiel 025 oder 25/78" autocomplete="off"></label>
     <label class="f">Name der Karte<input id="cstName" type="text" maxlength="60" placeholder="Pokémon-Name, zum Beispiel Pikachu oder Glurak" autocomplete="off"></label>
     <div id="cstSug" class="chiprow" hidden></div>
@@ -801,10 +828,30 @@ input[type=number]{width:130px}
     return DEX;
   }
   function norm(t) { return String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
-  function customInSet(lang, setId) {
-    var out = [];
+  /* Eigene Sets: Einträge ohne Set aus der Datenbank, zusammengehalten über den Namen ohne Groß-/Kleinschreibung und Akzente */
+  function setSlug(name) { return norm(name).normalize('NFC').replace(/[^\p{L}\p{N}]+/gu, '').slice(0, 40); }
+  function ownRef(i) { return i.custom && !i.setId ? 'own:' + setSlug(i.set) : ''; }
+  function isOwnRef(r) { return String(r || '').indexOf('own:') === 0; }
+  function ownSets(lang) {
+    var map = {};
     state.collections.forEach(function (c) {
-      (c.items || []).forEach(function (i) { if (i.custom && i.lang === lang && i.setId === setId && i.qty > 0) out.push(i); });
+      (c.items || []).forEach(function (i) {
+        var r = i.lang === lang ? ownRef(i) : '';
+        if (!r || r === 'own:') return;
+        var o = map[r] || (map[r] = { ref: r, name: i.set, total: 0, n: 0 });
+        o.n++;
+        if (i.setTotal > o.total) o.total = i.setTotal;
+      });
+    });
+    return Object.keys(map).map(function (k) { return map[k]; }).sort(function (a, b) { return a.name.localeCompare(b.name, 'de'); });
+  }
+  function customInSet(lang, setId) {
+    var out = [], own = isOwnRef(setId);
+    state.collections.forEach(function (c) {
+      (c.items || []).forEach(function (i) {
+        if (!i.custom || i.lang !== lang || !(i.qty > 0)) return;
+        if (own ? ownRef(i) === setId : i.setId === setId) out.push(i);
+      });
     });
     return out;
   }
@@ -878,6 +925,12 @@ input[type=number]{width:130px}
     var sel = $('#cstSet'), f = $('#cstSetFilter').value.trim().toLowerCase(), lang = $('#cstLang').value;
     var keep = want != null ? want : sel.value;
     sel.replaceChildren(el('option', { value: '', text: cst.sets.length ? '– Set auswählen –' : 'Keine Sets geladen' }));
+    var mineSets = ownSets(lang).filter(function (o) { return !f || o.name.toLowerCase().indexOf(f) >= 0; });
+    if (mineSets.length) {
+      sel.append(el('optgroup', { label: 'Meine Sets' }, mineSets.map(function (o) {
+        return el('option', { value: o.ref, text: o.name + (o.total ? ' · ' + o.total + ' Karten' : '') });
+      })));
+    }
     cst.sets.forEach(function (x) {
       var label = setLabel(x, lang);
       if (f && label.toLowerCase().indexOf(f) < 0 && String(x.id).toLowerCase().indexOf(f) < 0) return;
@@ -885,7 +938,21 @@ input[type=number]{width:130px}
     });
     sel.append(el('option', { value: '__free', text: '– Set steht nicht in der Liste –' }));
     if (keep && Array.prototype.some.call(sel.options, function (o) { return o.value === keep; })) sel.value = keep;
-    $('#cstSetFreeRow').hidden = sel.value !== '__free';
+    cstSetRows();
+  }
+  /* Eingabefelder je nach Auswahl: eigener Name und Kartenzahl nur bei eigenen Sets */
+  function cstSetRows(prefill) {
+    var v = $('#cstSet').value, lang = $('#cstLang').value;
+    $('#cstSetFreeRow').hidden = v !== '__free';
+    $('#cstTotalRow').hidden = !(v === '__free' || isOwnRef(v));
+    if (prefill && isOwnRef(v)) {
+      var o = ownSets(lang).find(function (x) { return x.ref === v; });
+      $('#cstTotal').value = o && o.total ? String(o.total) : '';
+    }
+    var hint = $('#cstFreeHint'), nm = $('#cstSetFree').value.trim(), hit = null;
+    if (v === '__free' && nm) hit = ownSets(lang).find(function (x) { return x.ref === 'own:' + setSlug(nm); });
+    hint.hidden = !hit;
+    if (hit) hint.textContent = 'Passt zu deinem Set „' + hit.name + '“ – die Karte kommt dort hinein.';
   }
   function openCustom(preset) {
     preset = preset || {};
@@ -897,11 +964,11 @@ input[type=number]{width:130px}
     LANGS.forEach(function (l) { ls.append(el('option', { value: l[0], text: l[1] })); });
     ls.value = lang;
     cst.dex = null; cst.suffix = ''; cst.photo = '';
-    ['#cstSetFilter', '#cstSetFree', '#cstNum', '#cstName', '#cstPrice'].forEach(function (id) { $(id).value = ''; });
+    ['#cstSetFilter', '#cstSetFree', '#cstNum', '#cstName', '#cstPrice', '#cstTotal'].forEach(function (id) { $(id).value = ''; });
     $('#cstQty').value = '1';
     $('#cstPhotoInfo').textContent = ''; $('#cstMsg').textContent = ''; $('#cstMsg').className = 'status';
     $('#cstSug').hidden = true; cstSuffixes(); cstPreview();
-    cstLoadSets(lang).then(function () { if (preset.setId) cstRenderSets(preset.setId); });
+    cstLoadSets(lang).then(function () { if (preset.setId) { cstRenderSets(preset.setId); cstSetRows(true); } });
     $('#cstWrap').hidden = false;
     setTimeout(function () { $('#cstSetFilter').focus(); }, 30);
   }
@@ -909,9 +976,13 @@ input[type=number]{width:130px}
   function cstSubmit() {
     var msg = $('#cstMsg'), lang = $('#cstLang').value, sv = $('#cstSet').value;
     function bad(t) { msg.className = 'status err'; msg.textContent = t; }
-    var setObj = sv && sv !== '__free' ? cst.sets.find(function (x) { return x.id === sv; }) : null;
-    var setName = setObj ? (setObj.name || setObj.id) : (sv === '__free' ? $('#cstSetFree').value.trim() : '');
+    var own = isOwnRef(sv) ? ownSets(lang).find(function (x) { return x.ref === sv; }) || null : null;
+    var setObj = sv && sv !== '__free' && !isOwnRef(sv) ? cst.sets.find(function (x) { return x.id === sv; }) : null;
+    var freeName = sv === '__free' ? $('#cstSetFree').value.trim() : '';
+    if (freeName && !own) own = ownSets(lang).find(function (x) { return x.ref === 'own:' + setSlug(freeName); }) || null;
+    var setName = setObj ? (setObj.name || setObj.id) : (own ? own.name : freeName);
     if (!setName) { bad('Bitte wähle ein Set aus oder gib den Set-Namen ein.'); return; }
+    if (!setObj && !setSlug(setName)) { bad('Der Set-Name braucht mindestens einen Buchstaben oder eine Zahl.'); return; }
     var numRaw = $('#cstNum').value.trim();
     if (!numRaw) { bad('Bitte trage die Kartennummer ein.'); return; }
     var n = cstNames();
@@ -920,10 +991,12 @@ input[type=number]{width:130px}
     var pv = parseFloat($('#cstPrice').value.replace(',', '.'));
     var price = isFinite(pv) && pv >= 0 ? pv : null;
     var num = numRaw.split('/')[0].trim();
-    var total = setObj && setObj.cardCount && (setObj.cardCount.official || setObj.cardCount.total);
-    var setKey = setObj ? setObj.id : 'x' + norm(setName).replace(/[^a-z0-9]+/g, '');
+    var tv = parseInt($('#cstTotal').value, 10);
+    var ownTotal = !setObj ? (tv > 0 ? tv : (own ? own.total : 0)) : 0;
+    var total = setObj ? setObj.cardCount && (setObj.cardCount.official || setObj.cardCount.total) : ownTotal;
+    var setKey = setObj ? setObj.id : 'x' + setSlug(setName);
     var numKey = /^\d+$/.test(num) ? String(parseInt(num, 10)) : num;
-    var id = ('custom-' + setKey + '-' + numKey).toLowerCase().replace(/[^a-z0-9._-]+/g, '_');
+    var id = ('custom-' + setKey + '-' + numKey).toLowerCase().replace(/[^\p{L}\p{N}._-]+/gu, '_');
     var col = active(), list = listOf(col, 'items');
     var key = itemKey(lang, id, 'normal');
     var ex = list.find(function (i) { return i.key === key; });
@@ -937,8 +1010,19 @@ input[type=number]{width:130px}
         image: '', qty: qty, variant: 'normal', rev: false, base: 'Normal', price: null, manual: price, added: Date.now(), custom: true
       });
     }
+    /* Kartenzahl eines eigenen Sets gilt für alle seine Einträge */
+    if (!setObj && ownTotal) {
+      state.collections.forEach(function (c) {
+        (c.items || []).forEach(function (i) {
+          if (i.lang !== lang || ownRef(i) !== 'own:' + setSlug(setName)) return;
+          i.setTotal = ownTotal;
+          if (/^\d+$/.test(i.num || '')) i.number = i.num + '/' + ownTotal;
+        });
+      });
+    }
     var done = function () {
-      save(); renderCollection(); closeCustom(); scanLinkable();
+      save(); renderCollection(); closeCustom(); scanLinkable(); renderSetOptions();
+      if (curSet && isOwnRef(curSet)) updateSetProgress();
       showToast('„' + n.name + '“ eingetragen.', false);
     };
     if (cst.photo) savePhoto(photoKey(lang, id), cst.photo).then(done, done); else done();
@@ -1030,7 +1114,7 @@ input[type=number]{width:130px}
     var empty = !!curSetCards && curSetKey === lang + ':' + curSet && !curSetCards.length;
     if (!empty && !mine.length) { box.hidden = true; return; }
     box.replaceChildren();
-    if (empty) box.append(el('div', { class: 'meta', text: 'Die Datenbank liefert für dieses Set noch keine Karten. Du kannst deine Karten selbst eintragen.' }));
+    if (empty) box.append(el('div', { class: 'meta', text: isOwnRef(curSet) ? 'Das ist ein eigenes Set, es kommt nicht aus der Datenbank. Hier siehst du deine Einträge.' : 'Die Datenbank liefert für dieses Set noch keine Karten. Du kannst deine Karten selbst eintragen.' }));
     if (mine.length) {
       box.append(el('div', { class: 'cname', text: 'Deine eigenen Einträge in diesem Set (' + mine.length + ')' }));
       mine.slice().sort(function (a, b) { return (parseInt(a.num, 10) || 0) - (parseInt(b.num, 10) || 0); }).forEach(function (i) {
@@ -1042,6 +1126,127 @@ input[type=number]{width:130px}
     box.append(el('div', { class: 'row' }, el('button', { class: 'btn small primary', type: 'button', text: 'Eigene Karte eintragen', onclick: function () { openCustom({ lang: lang, setId: curSet }); } })));
     box.hidden = false;
   }
+
+  /* ---------- Statistik ---------- */
+  var stat = { scope: 'col' };
+  var CARD_CM = 0.0305, CARD_G = 1.8;
+  var STACK_REFS = [[9.5, 'eine Kaffeetasse'], [30, 'ein Lineal'], [75, 'ein Küchentisch'], [180, 'ein ausgewachsener Mensch'], [550, 'eine Giraffe'], [3000, 'ein dreistöckiges Haus'], [33000, 'der Eiffelturm']];
+  function nfmt(n, d) { return Number(n).toLocaleString('de-DE', { maximumFractionDigits: d == null ? 0 : d }); }
+  function statRows(box, rows, fmt) {
+    var max = rows.reduce(function (m, r) { return Math.max(m, r.v); }, 0) || 1;
+    rows.forEach(function (r) {
+      box.append(el('div', { class: 'st-row' },
+        el('span', { class: 'nm', text: r.name, title: r.name }),
+        el('span', { class: 'vl', text: fmt(r) }),
+        el('div', { class: 'st-bar' }, el('i', { style: 'width:' + Math.max(2, Math.round(r.v / max * 100)) + '%' }))));
+    });
+  }
+  function renderStats() {
+    var all = stat.scope === 'all', col = active();
+    var items = (all ? state.collections.reduce(function (a, c) { return a.concat(c.items || []); }, []) : (col.items || [])).filter(function (i) { return i.qty > 0; });
+    var body = $('#statBody');
+    body.replaceChildren();
+    var sc = $('#statScope');
+    sc.hidden = state.collections.length < 2;
+    sc.replaceChildren();
+    [['col', col.name], ['all', 'Alle Sammlungen']].forEach(function (o) {
+      sc.append(el('button', { type: 'button', text: o[1], 'aria-pressed': String(stat.scope === o[0] || (state.collections.length < 2 && o[0] === 'col')), onclick: function () { stat.scope = o[0]; renderStats(); } }));
+    });
+    if (!items.length) { body.append(el('p', { class: 'meta', text: 'Hier ist noch nichts. Sobald du Karten einträgst, siehst du hier deine Zahlen.' })); return; }
+    var r = summarize(items), priced = r.cards - r.missing;
+    var own = items.filter(function (i) { return i.custom; }).reduce(function (n, i) { return n + i.qty; }, 0);
+    function kpi(v, l) { return el('div', { class: 'st-kpi' }, el('b', { text: v }), el('span', { text: l })); }
+    body.append(el('div', { class: 'st-grid' },
+      kpi(money(r.sum), 'Gesamtwert'),
+      kpi(nfmt(r.cards), r.cards === 1 ? 'Karte' : 'Karten'),
+      kpi(nfmt(items.length), 'verschiedene Karten'),
+      kpi(priced ? money(r.sum / priced) : '–', 'Ø Wert pro Karte')));
+    var notes = [];
+    if (r.missing) notes.push(nfmt(r.missing) + (r.missing === 1 ? ' Karte hat' : ' Karten haben') + ' keinen Preis und ' + (r.missing === 1 ? 'fehlt' : 'fehlen') + ' im Wert.');
+    if (own) notes.push(nfmt(own) + ' davon ' + (own === 1 ? 'ist ein eigener Eintrag.' : 'sind eigene Einträge.'));
+    if (notes.length) body.append(el('p', { class: 'meta', text: notes.join(' ') }));
+
+    /* Wert nach Set */
+    var sets = {}, langs = {};
+    items.forEach(function (i) {
+      var u = unitPrice(i), v = u ? u.value * i.qty : 0, k = (i.set || 'Ohne Set') + '|' + i.lang;
+      var s = sets[k] || (sets[k] = { name: i.set || 'Ohne Set', lang: i.lang, v: 0, n: 0 });
+      s.v += v; s.n += i.qty;
+      var l = langs[i.lang] || (langs[i.lang] = { name: (LANGS.filter(function (x) { return x[0] === i.lang; })[0] || [0, i.lang])[1], v: 0, n: 0 });
+      l.v += v; l.n += i.qty;
+    });
+    var setRows = Object.keys(sets).map(function (k) { return sets[k]; }).sort(function (a, b) { return b.v - a.v || b.n - a.n; });
+    var oneLang = Object.keys(langs).length < 2;
+    body.append(el('div', { class: 'st-h', text: 'Wert nach Set' }));
+    var sb = el('div');
+    statRows(sb, setRows.slice(0, 6).map(function (x) { return { name: x.name + (oneLang ? '' : ' · ' + x.lang.toUpperCase()), v: x.v, n: x.n }; }), function (x) { return money(x.v) + ' · ' + nfmt(x.n) + '×'; });
+    body.append(sb);
+    if (setRows.length > 6) body.append(el('p', { class: 'meta', text: '… und ' + (setRows.length - 6) + ' weitere Sets' }));
+
+    if (!oneLang) {
+      body.append(el('div', { class: 'st-h', text: 'Wert nach Sprache' }));
+      var lb = el('div');
+      statRows(lb, Object.keys(langs).map(function (k) { return langs[k]; }).sort(function (a, b) { return b.v - a.v; }), function (x) { return money(x.v) + ' · ' + nfmt(x.n) + '×'; });
+      body.append(lb);
+    }
+
+    /* Teuerste Karten und häufigste Karten */
+    var top = items.map(function (i) { var u = unitPrice(i); return { i: i, p: u ? u.value : 0 }; }).filter(function (x) { return x.p > 0; }).sort(function (a, b) { return b.p - a.p; }).slice(0, 5);
+    if (top.length) {
+      body.append(el('div', { class: 'st-h', text: 'Teuerste Karten' }));
+      var tb = el('div');
+      statRows(tb, top.map(function (x) { return { name: (x.i.alt || x.i.name) + (x.i.set ? ' · ' + x.i.set : ''), v: x.p }; }), function (x) { return money(x.v); });
+      body.append(tb);
+    }
+    var dup = items.filter(function (i) { return i.qty > 1; }).sort(function (a, b) { return b.qty - a.qty; }).slice(0, 3);
+    if (dup.length) {
+      body.append(el('div', { class: 'st-h', text: 'Am häufigsten vorhanden' }));
+      var db = el('div');
+      statRows(db, dup.map(function (i) { return { name: (i.alt || i.name) + (i.set ? ' · ' + i.set : ''), v: i.qty }; }), function (x) { return x.v + '×'; });
+      body.append(db);
+    }
+
+    /* Wertentwicklung der letzten 30 Tage aus dem gespeicherten Verlauf */
+    body.append(el('div', { class: 'st-h', text: 'Wert in den letzten 30 Tagen' }));
+    var ser = rangeSlice(seriesFor(all ? 'all' : col.id), 30);
+    if (ser.length < 2) {
+      body.append(el('p', { class: 'meta', text: 'Dafür gibt es noch zu wenig Verlauf. Die App merkt sich den Wert Tag für Tag, sobald du sie öffnest.' }));
+    } else {
+      var a = ser[0], b = ser[ser.length - 1], d = b.v - a.v, pct = a.v ? d / a.v * 100 : null;
+      body.append(el('div', { class: 'st-row' },
+        el('span', { class: 'nm', text: 'seit ' + fmtDate(a.t) }),
+        el('span', { class: 'vl ' + (d > 0.004 ? 'st-up' : d < -0.004 ? 'st-down' : ''), text: (d > 0 ? '+' : d < 0 ? '−' : '') + money(Math.abs(d)) + (pct != null ? ' (' + (d > 0 ? '+' : d < 0 ? '−' : '') + nfmt(Math.abs(pct), 1) + ' %)' : '') })));
+      var lo = Math.min.apply(null, ser.map(function (x) { return x.v; })), hi = Math.max.apply(null, ser.map(function (x) { return x.v; })), t0 = ser[0].t, t1 = ser[ser.length - 1].t;
+      var path = ser.map(function (x, k) {
+        var px = t1 > t0 ? (x.t - t0) / (t1 - t0) * 300 : 150, py = hi > lo ? 54 - (x.v - lo) / (hi - lo) * 48 : 30;
+        return (k ? 'L' : 'M') + px.toFixed(1) + ' ' + py.toFixed(1);
+      }).join('');
+      var svg = svgEl('svg', { viewBox: '0 0 300 60', preserveAspectRatio: 'none', class: 'st-spark', role: 'img', 'aria-label': 'Verlauf des Gesamtwerts' });
+      svg.append(svgEl('path', { d: path }));
+      body.append(svg);
+    }
+
+    /* Spaß */
+    var cm = r.cards * CARD_CM, g = r.cards * CARD_G;
+    var h = cm >= 100 ? nfmt(cm / 100, 2) + ' m' : nfmt(cm, 1) + ' cm';
+    var ref = null;
+    STACK_REFS.forEach(function (x) { if (cm >= x[0]) ref = x; });
+    var facts = [
+      'Übereinander gestapelt wären deine Karten ' + h + ' hoch' + (ref ? ' – etwa ' + (cm / ref[0] >= 1.5 ? nfmt(cm / ref[0], 1) + '-mal so hoch wie ' : 'so hoch wie ') + ref[1] : '') + '.',
+      'Zusammen wiegen sie etwa ' + (g >= 1000 ? nfmt(g / 1000, 2) + ' kg' : nfmt(g) + ' g') + '.'
+    ];
+    if (priced && g > 0) facts.push('Ein Gramm Karton ist bei dir im Schnitt ' + money(r.sum / g) + ' wert.');
+    body.append(el('div', { class: 'st-h', text: 'Zum Schmunzeln' }));
+    body.append(el('div', { class: 'st-fun' }, facts.map(function (t) { return el('div', { text: t }); })));
+    body.append(el('p', { class: 'meta', text: 'Grobe Schätzung: Eine Karte ist etwa 0,3 mm dick und wiegt etwa 1,8 g.' }));
+  }
+  function openStats() {
+    renderStats();
+    $('#statWrap').hidden = false;
+    $('#statWrap .sheet').scrollTop = 0;
+    setTimeout(function () { $('#statClose').focus(); }, 30);
+  }
+  function closeStats() { $('#statWrap').hidden = true; try { $('#statBtn').focus(); } catch (e) {} }
 
   /* ---------- Wunschliste offline ---------- */
   /* Nur die Bilder der Wunschliste werden auf Knopfdruck im Gerätespeicher abgelegt (klein und groß).
@@ -1401,8 +1606,9 @@ input[type=number]{width:130px}
     box.append(el('button', { class: 'chip', type: 'button', text: lname, 'aria-label': 'Sprache ändern: ' + lname, onclick: function () { setFilterOpen(true); } }));
     if (curSet) {
       var s = allSets.filter(function (x) { return x.id === curSet; })[0];
+      var ownO = isOwnRef(curSet) ? ownSets(state.lang).find(function (x) { return x.ref === curSet; }) : null;
       box.append(el('span', { class: 'chip on' },
-        el('span', { text: s ? setLabel(s) : curSet }),
+        el('span', { text: ownO ? ownO.name : s ? setLabel(s) : curSet }),
         el('button', { class: 'x', type: 'button', 'aria-label': 'Set-Auswahl aufheben', text: '×', onclick: function () {
           $('#setSel').value = '';
           $('#setSel').dispatchEvent(new Event('change'));
@@ -1457,8 +1663,9 @@ input[type=number]{width:130px}
       mine.forEach(function (i) { seen[String(i.num || i.number).toLowerCase()] = true; });
       var have0 = Object.keys(seen).length, so = allSets.find(function (x) { return x.id === curSet; });
       var tot0 = so && so.cardCount && (so.cardCount.total || so.cardCount.official) || 0;
+      if (isOwnRef(curSet)) tot0 = mine.reduce(function (m, i) { return Math.max(m, i.setTotal || 0); }, 0);
       var pct0 = tot0 ? Math.min(have0 >= tot0 ? 100 : 99, Math.max(1, Math.round(have0 / tot0 * 100))) : 0;
-      $('#spText').textContent = tot0 ? have0 + ' von ' + tot0 + ' Karten (eigene Einträge)' : have0 + ' Karten (eigene Einträge)';
+      $('#spText').textContent = isOwnRef(curSet) ? (tot0 ? have0 + ' von ' + tot0 + ' Karten' : have0 + ' Karten') : (tot0 ? have0 + ' von ' + tot0 + ' Karten (eigene Einträge)' : have0 + ' Karten (eigene Einträge)');
       $('#spPct').textContent = tot0 ? pct0 + ' %' : '';
       $('#spFill').style.width = pct0 + '%';
       $('#spBar').setAttribute('aria-valuenow', String(pct0));
@@ -1563,6 +1770,13 @@ input[type=number]{width:130px}
     var sel = $('#setSel');
     sel.replaceChildren(el('option', { value: '', text: allSets.length ? 'Alle Sets (' + allSets.length + ')' : 'Keine Sets in dieser Sprache gefunden' }));
     var shownSets = 0;
+    var mineO = ownSets(state.lang).filter(function (o) { return !f || o.name.toLowerCase().indexOf(f) >= 0; });
+    if (mineO.length) {
+      sel.append(el('optgroup', { label: 'Meine Sets' }, mineO.map(function (o) {
+        return el('option', { value: o.ref, text: o.name + ' · ' + o.n + (o.n === 1 ? ' Eintrag' : ' Einträge') });
+      })));
+      shownSets += mineO.length;
+    }
     allSets.forEach(function (s) {
       var label = setLabel(s);
       if (f && label.toLowerCase().indexOf(f) < 0 && String(s.id).toLowerCase().indexOf(f) < 0) return;
@@ -1599,6 +1813,12 @@ input[type=number]{width:130px}
     $('#results').replaceChildren();
     $('#moreBtn').hidden = true;
     curSetCards = null; updateSetProgress();
+    if (isOwnRef(id)) {
+      curSetCards = []; curSetKey = lang + ':' + id; results = []; shown = 0;
+      updateSetProgress();
+      setStatus(customInSet(lang, id).length ? 'Eigenes Set. Deine Einträge stehen unten.' : 'Eigenes Set ohne Einträge in dieser Sprache.');
+      return;
+    }
     var ck = lang + ':' + id;
     var p = fetchSetCards(lang, id);
     p.then(function (cards) {
@@ -2078,6 +2298,7 @@ input[type=number]{width:130px}
     $('#collManage').hidden = wishMode;
     $('#collActions').hidden = wishMode;
     $('#customAct').hidden = wishMode;
+    $('#statBtn').hidden = wishMode;
     $('#ovToggle').hidden = wishMode;
     $('#vhSpark').hidden = wishMode;
     $('#ovWrap').hidden = wishMode || !ovOpen;
@@ -2937,6 +3158,10 @@ input[type=number]{width:130px}
 
   $('#addCustom').addEventListener('click', function () { openCustom({}); });
   $('#linkBtn').addEventListener('click', linkAll);
+  $('#statBtn').addEventListener('click', openStats);
+  $('#statClose').addEventListener('click', closeStats);
+  $('#statWrap').addEventListener('click', function (e) { if (e.target === this) closeStats(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('#statWrap').hidden) closeStats(); });
   $('#cstCancel').addEventListener('click', closeCustom);
   $('#cstWrap').addEventListener('click', function (e) { if (e.target === this) closeCustom(); });
   $('#cstWrap').addEventListener('keydown', function (e) { if (e.key === 'Escape') closeCustom(); });
@@ -2947,7 +3172,8 @@ input[type=number]{width:130px}
     cstLoadSets($('#cstLang').value);
   });
   $('#cstSetFilter').addEventListener('input', function () { cstRenderSets(); });
-  $('#cstSet').addEventListener('change', function () { $('#cstSetFreeRow').hidden = this.value !== '__free'; });
+  $('#cstSet').addEventListener('change', function () { cstSetRows(true); });
+  $('#cstSetFree').addEventListener('input', function () { cstSetRows(false); });
   $('#cstName').addEventListener('input', function () {
     if (cst.dex) { cst.dex = null; cst.suffix = ''; cstSuffixes(); }
     cstPreview(); cstSuggest();
