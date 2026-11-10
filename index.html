@@ -526,6 +526,7 @@ input[type=number]{width:130px}
     <div class="row" id="scMarkRow" hidden><button class="btn small" id="scMark" type="button">Nummer im Foto markieren</button></div>
     <div id="scStatus2" class="status" role="status" aria-live="polite"></div>
     <div id="scSum" class="sc-sum" hidden></div>
+    <details id="scDbg" class="meta" hidden><summary>Technische Details</summary><pre id="scDbgText" style="white-space:pre-wrap;overflow-wrap:anywhere;margin:6px 0 0;font-size:.72rem"></pre></details>
     <div class="sc-fields">
       <label class="f">Nummer<input id="scNum" type="text" inputmode="numeric" maxlength="8" placeholder="025" autocomplete="off"></label>
       <label class="f">Von (Gesamtzahl)<input id="scTotal" type="text" inputmode="numeric" maxlength="4" placeholder="165" autocomplete="off"></label>
@@ -1183,7 +1184,13 @@ input[type=number]{width:130px}
   /* Texterkennung (Tesseract.js) wird erst beim ersten Scan nachgeladen. Gesucht werden die Kartennummer (025/165) und der Name.
      Mit Nummer und Gesamtzahl findet die App die Sets mit dieser Kartenzahl und darin die Karte. */
   var OCR_URLS = ['https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js', 'https://unpkg.com/tesseract.js@5.1.1/dist/tesseract.min.js'];
-  var scan = { worker: null, loading: null, busy: false, stream: null, list: [], lang: '', q: null, run: 0, canvas: null };
+  var scan = { worker: null, loading: null, busy: false, stream: null, list: [], lang: '', q: null, run: 0, canvas: null, dbg: [], hp: 0 };
+  function dbg(line) {
+    if (line == null) { scan.dbg = []; } else { scan.dbg.push(line); if (scan.dbg.length > 60) scan.dbg.shift(); }
+    $('#scDbgText').textContent = scan.dbg.join('\n');
+    $('#scDbg').hidden = !scan.dbg.length;
+  }
+  function errMsg(e) { return (e && e.message) || (typeof e === 'string' ? e : 'unbekannter Fehler'); }
   function scStatus(msg, err) {
     var a = $('#scStatus2');
     a.textContent = msg || ''; a.className = 'status' + (err ? ' err' : '');
@@ -1296,7 +1303,9 @@ input[type=number]{width:130px}
     return { x: c0 / k, y: r0 / k, w: bw / k, h: bh / k };
   }
   function parseScan(text) {
-    var out = { num: '', total: '', name: '' }, m, last = null;
+    var out = { num: '', total: '', name: '', hp: 0 }, m, last = null;
+    var hpm = String(text).match(/\b(?:KP|HP|PV|PS|PF)\s*(\d{2,3})\b/i);
+    if (hpm) out.hp = parseInt(hpm[1], 10);
     var re = /(?:^|[^\d])(\d{1,3})\s*[\/|\\Il!]\s*(\d{2,3})(?!\d)/g;
     while ((m = re.exec(text))) last = m;
     if (!last) {
@@ -1317,7 +1326,11 @@ input[type=number]{width:130px}
   }
   function recognize(w, canvas, psm, wl) {
     return w.setParameters({ tessedit_pageseg_mode: String(psm), tessedit_char_whitelist: wl || '' }).then(function () { return w.recognize(canvas); })
-      .then(function (r) { return String(r && r.data && r.data.text || ''); });
+      .then(function (r) {
+        var t = String(r && r.data && r.data.text || '');
+        dbg('psm ' + psm + (wl ? ' Ziffern' : '') + ' ' + canvas.width + '×' + canvas.height + ': ' + (t.replace(/\s+/g, ' ').trim().slice(0, 70) || '(leer)'));
+        return t;
+      });
   }
   var DIGITS = '0123456789/';
   /* Durchgänge nacheinander, bis eine Nummer gefunden ist. Jeder Eintrag: [Zone, Aufbereitung, Seitenmodus, erlaubte Zeichen] */
@@ -1355,41 +1368,73 @@ input[type=number]{width:130px}
       return next();
     });
   }
-  function runOcr(canvas, run) {
-    var W = canvas.width, H = canvas.height, box = cardBox(canvas) || { x: 0, y: 0, w: W, h: H };
-    function zone(fy, fh, tw) { var y = box.y + box.h * fy; return { x: box.x, y: y, w: box.w, h: Math.min(box.h * fh, H - y), tw: tw }; }
-    var zones = { b: zone(0.80, 0.20, 2200), c: zone(0.88, 0.12, 2400), d: zone(0.66, 0.34, 2200), f: { x: 0, y: 0, w: W, h: H, tw: Math.min(W * 1.5, 2400) } };
-    var res;
-    return runPasses(canvas, zones, SCAN_PASSES, run, 'Nummer wird gesucht').then(function (got) {
-      res = got;
-      if (run !== scan.run || !res.num) return res;
-      /* Name: oberer Kartenrand (nur sinnvoll bei lateinischer Schrift) */
-      var lang = $('#scLang').value;
-      if (['ja', 'ko', 'zh-tw', 'zh-cn'].indexOf(lang) >= 0) return res;
-      var tz = { x: box.x, y: box.y, w: box.w, h: Math.min(box.h * 0.16, H - box.y), tw: 1800 };
-      return getOcr().then(function (w) {
-        scStatus('Name wird gelesen …');
-        return recognize(w, prepCanvas(canvas, tz.x, tz.y, tz.w, tz.h, tz.tw, 'gray'), 6, '').then(function (t) { res.name = parseScan(t).name || ''; return res; });
-      }).catch(function () { return res; });
-    });
+  function rotCanvas(src, deg) {
+    if (!deg) return src;
+    var c = document.createElement('canvas'), swap = deg === 90 || deg === 270;
+    c.width = swap ? src.height : src.width; c.height = swap ? src.width : src.height;
+    var g = c.getContext('2d');
+    g.translate(c.width / 2, c.height / 2); g.rotate(deg * Math.PI / 180);
+    g.drawImage(src, -src.width / 2, -src.height / 2);
+    return c;
   }
-  /* Rettungsweg: Nutzer markiert die Nummer im Foto */
+  var SHORT_PASSES = [['b', 'gray', 6, ''], ['c', 'ad2', 11, ''], ['b', 'ad2', 11, ''], ['d', 'gray', 11, '']];
+  /* Das Foto kann gedreht sein (Karte quer oder auf dem Kopf): alle vier Richtungen versuchen, die wahrscheinlichste zuerst */
+  function runOcr(canvas, run) {
+    var box0 = cardBox(canvas), landscape = box0 ? box0.w > box0.h : canvas.width > canvas.height;
+    var orients = box0 ? (landscape ? [90, 270, 0, 180] : [0, 180, 90, 270]) : (landscape ? [0, 90, 270, 180] : [0, 180, 90, 270]);
+    var i = 0;
+    function tryOrient() {
+      if (run !== scan.run || i >= orients.length) return Promise.resolve({ num: '', total: '', name: '', hp: 0 });
+      var deg = orients[i], first = i === 0; i++;
+      var rc = rotCanvas(canvas, deg), W = rc.width, H = rc.height, box = cardBox(rc) || { x: 0, y: 0, w: W, h: H };
+      function zone(fy, fh, tw) { var y = box.y + box.h * fy; return { x: box.x, y: y, w: box.w, h: Math.min(box.h * fh, H - y), tw: tw }; }
+      var zones = { b: zone(0.80, 0.20, 2200), c: zone(0.88, 0.12, 2400), d: zone(0.66, 0.34, 2200), f: { x: 0, y: 0, w: W, h: H, tw: Math.min(W * 1.5, 2400) } };
+      dbg('Richtung ' + deg + '°, Karte ' + (box0 ? 'gefunden' : 'nicht abgegrenzt'));
+      return runPasses(rc, zones, first ? SCAN_PASSES : SHORT_PASSES, run, 'Nummer wird gesucht (Drehung ' + deg + '°)').then(function (res) {
+        if (run !== scan.run) return res;
+        if (!res.num) return tryOrient();
+        /* Name und KP: oberer Kartenrand */
+        res.name = ''; res.hp = 0;
+        var tz = { x: box.x, y: box.y, w: box.w, h: Math.min(box.h * 0.16, H - box.y), tw: 1800 };
+        return getOcr().then(function (w) {
+          scStatus('Name wird gelesen …');
+          return recognize(w, prepCanvas(rc, tz.x, tz.y, tz.w, tz.h, tz.tw, 'gray'), 6, '').then(function (t) {
+            var pr = parseScan(t);
+            if (['ja', 'ko', 'zh-tw', 'zh-cn'].indexOf($('#scLang').value) < 0) res.name = pr.name || '';
+            res.hp = pr.hp || 0;
+            return res;
+          });
+        }).catch(function () { return res; });
+      });
+    }
+    return tryOrient();
+  }
+  /* Rettungsweg: Nutzer markiert die Nummer im Foto; auch hier alle vier Richtungen */
   function scanRegion(rect) {
     var canvas = scan.canvas, run = ++scan.run;
     if (!canvas) return Promise.resolve();
     var pad = Math.max(4, rect.h * 0.15);
     var x = Math.max(0, rect.x - pad), y = Math.max(0, rect.y - pad), w = Math.min(canvas.width - x, rect.w + pad * 2), h = Math.min(canvas.height - y, rect.h + pad * 2);
-    var tw = Math.min(3200, Math.max(900, w * Math.max(1, 220 / h)));
-    var zones = { r: { x: x, y: y, w: w, h: h, tw: tw } };
-    var passes = [['r', 'gray', 7, DIGITS], ['r', 'ad', 7, DIGITS], ['r', 'gray', 6, ''], ['r', 'ad', 6, ''], ['r', 'inv', 7, DIGITS], ['r', 'gray', 11, ''], ['r', 'adinv', 7, DIGITS]];
-    scan.busy = true; $('#scSum').hidden = true;
-    return runPasses(canvas, zones, passes, run, 'Markierter Bereich wird gelesen').then(function (got) {
+    var crop = document.createElement('canvas'); crop.width = Math.round(w); crop.height = Math.round(h);
+    crop.getContext('2d').drawImage(canvas, x, y, w, h, 0, 0, crop.width, crop.height);
+    var passes = [['r', 'gray', 7, DIGITS], ['r', 'gray', 6, ''], ['r', 'ad', 7, DIGITS], ['r', 'ad', 6, ''], ['r', 'inv', 7, DIGITS], ['r', 'gray', 11, '']];
+    var degs = w >= h ? [0, 180, 90, 270] : [90, 270, 0, 180], i = 0;
+    scan.busy = true; $('#scSum').hidden = true; dbg('Markierter Bereich ' + crop.width + '×' + crop.height);
+    function tryDeg() {
+      if (run !== scan.run) return Promise.resolve({ num: '' });
+      if (i >= degs.length) return Promise.resolve({ num: '' });
+      var rc = rotCanvas(crop, degs[i++]);
+      var tw = Math.min(3200, Math.max(900, rc.width * Math.max(1, 220 / rc.height)));
+      return runPasses(rc, { r: { x: 0, y: 0, w: rc.width, h: rc.height, tw: tw } }, passes, run, 'Markierter Bereich wird gelesen (Drehung ' + degs[i - 1] + '°)')
+        .then(function (got) { return got.num ? got : tryDeg(); });
+    }
+    return tryDeg().then(function (got) {
       if (run !== scan.run) return;
       scan.busy = false;
       if (!got.num) { scStatus('In dem Bereich wurde keine Nummer erkannt. Markiere nur die Nummer etwas enger oder tippe sie unten ein.', true); return; }
       $('#scNum').value = got.num; $('#scTotal').value = got.total;
       return scanSearch();
-    }).catch(function (e) { scan.busy = false; scStatus('Die Texterkennung konnte nicht geladen werden (' + e.message + ').', true); });
+    }).catch(function (e) { scan.busy = false; scStatus('Die Texterkennung konnte nicht geladen werden (' + errMsg(e) + ').', true); });
   }
   function cropSetup() {
     var cv = $('#scCropCv'), src = scan.canvas, box = $('#scBox'), wrap = $('#scCrop'), st = null;
@@ -1468,12 +1513,39 @@ input[type=number]{width:130px}
     if (!f.total && !f.name) { scStatus('Mit der Nummer allein ist die Karte nicht eindeutig. Trage noch die Gesamtzahl (die Zahl hinter dem Schrägstrich) oder den Namen ein.', true); return Promise.resolve(); }
     scStatus('Karte wird gesucht …');
     return scanLookup(lang, f.num, f.total, f.name).then(function (list) {
-      if (run !== scan.run) return;
+      if (run !== scan.run) return null;
+      /* Gegenprüfung im Hintergrund: stimmen Kartenname und KP-Wert vom Foto mit den ersten Treffern überein? */
+      if (!list.length || (!f.name && !scan.hp)) return { list: list, check: '' };
+      scStatus('Treffer werden mit dem Foto verglichen …');
+      return Promise.all(list.slice(0, 6).map(function (c) {
+        return getCard(lang, c.id).then(function (d) { return d; }, function () { return null; });
+      })).then(function (full) {
+        var best = -1, bestScore = -1;
+        full.forEach(function (d, k) {
+          if (!d) return;
+          var sc = 0;
+          if (f.name && nameScore(d.name || '', f.name) >= 2) sc += 2;
+          if (scan.hp && parseInt(d.hp, 10) === scan.hp) sc += 2;
+          if (sc > bestScore) { bestScore = sc; best = k; }
+          list[k]._v = sc;
+        });
+        if (best > 0 && bestScore >= 2) { var c0 = list.splice(best, 1)[0]; list.unshift(c0); }
+        var want = (f.name ? 2 : 0) + (scan.hp ? 2 : 0);
+        var txt = '';
+        if (bestScore >= want && want) txt = 'Geprüft: ' + (f.name && scan.hp ? 'Name und KP stimmen' : f.name ? 'Name stimmt' : 'KP stimmt') + ' mit dem Foto überein.';
+        else if (bestScore > 0) txt = 'Teilweise geprüft: ' + (f.name && nameScore((full[best] && full[best].name) || '', f.name) >= 2 ? 'Name stimmt' : 'KP stimmt') + ', der Rest nicht sicher.';
+        else txt = 'Achtung: Name oder KP auf dem Foto passen nicht zu den Treffern. Prüfe die Nummer oben.';
+        return { list: list, check: txt, warn: bestScore <= 0 };
+      });
+    }).then(function (r0) {
+      if (!r0 || run !== scan.run) return;
+      var list = r0.list;
       scan.list = list; scan.lang = lang; scan.q = f;
       scStatus('');
       var label = (f.name ? f.name + ' · ' : '') + (f.num ? 'Nr. ' + f.num + (f.total ? ' von ' + f.total : '') : '');
       if (list.length) {
         sum.append(el('div', { text: list.length + (list.length === 1 ? ' Treffer' : ' Treffer') + ' für ' + label }),
+          r0.check ? el('div', { class: 'meta', style: r0.warn ? 'color:var(--warn)' : 'color:var(--ok)', text: r0.check }) : null,
           el('div', { class: 'row' }, el('button', { class: 'btn primary', type: 'button', text: 'Treffer anzeigen', onclick: scanShow })));
       } else {
         sum.append(el('div', { text: 'Keine passende Karte in der Datenbank gefunden (' + label + '). Prüfe die Zahlen oben oder trage die Karte selbst ein.' }),
@@ -1484,7 +1556,7 @@ input[type=number]{width:130px}
       sum.hidden = false;
     }).catch(function (e) {
       if (run !== scan.run) return;
-      scStatus('Die Suche ist fehlgeschlagen (' + e.message + '). Bitte prüfe die Verbindung.', true);
+      scStatus('Die Suche ist fehlgeschlagen (' + errMsg(e) + '). Bitte prüfe die Verbindung.', true);
     });
   }
   function scanShow() {
@@ -1508,9 +1580,10 @@ input[type=number]{width:130px}
     $('#scThumb').src = canvas.toDataURL('image/jpeg', 0.6);
     $('#scThumbRow').hidden = false; $('#scSum').hidden = true;
     scStatus('Foto wird gelesen …');
+    dbg(null); dbg('Foto ' + canvas.width + '×' + canvas.height);
     return runOcr(canvas, run).then(function (got) {
       if (run !== scan.run) return;
-      scan.busy = false;
+      scan.busy = false; scan.hp = got.hp || 0;
       $('#scNum').value = got.num; $('#scTotal').value = got.total; $('#scName').value = got.name;
       if (!got.num) {
         scStatus('Die Nummer wurde nicht automatisch erkannt. Markiere sie im Foto, trage sie unten ein oder mache das Foto noch einmal.', true);
@@ -1521,7 +1594,8 @@ input[type=number]{width:130px}
     }).catch(function (e) {
       scan.busy = false;
       if (run !== scan.run) return;
-      scStatus('Die Texterkennung konnte nicht geladen werden (' + e.message + '). Du kannst Nummer und Gesamtzahl unten von Hand eintragen und trotzdem suchen.', true);
+      dbg('Fehler: ' + errMsg(e));
+      scStatus('Die Texterkennung konnte nicht geladen werden (' + errMsg(e) + '). Du kannst Nummer und Gesamtzahl unten von Hand eintragen und trotzdem suchen.', true);
     });
   }
   function scanFileChosen(inp) {
