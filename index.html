@@ -20,8 +20,12 @@
   --gl1:42%; --gl2:34%;
   --ok:#5fe0a0; --warn:#ffb866; --danger:#ff8f86;
   --scrim:rgba(4,7,16,.94); --lb-ink:#f2f4f7;
-  --radius:20px; --radius-s:14px;
-  --shadow:0 8px 28px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.06);
+  --radius:28px; --radius-s:18px;
+  --shadow:0 18px 40px -14px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.22),inset 0 -1px 0 rgba(255,255,255,.04);
+  --glass-grad:linear-gradient(160deg,rgba(255,255,255,.17),rgba(255,255,255,.05));
+  --btn-grad:linear-gradient(160deg,rgba(255,255,255,.12),rgba(255,255,255,.04));
+  --edge:rgba(255,255,255,.18); --hi:rgba(255,255,255,.22);
+  --glow:.74; --glowmax:1;
   --font:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
   color-scheme:dark;
 }
@@ -31,7 +35,11 @@
   --accent-ink:#ffffff; --gl1:16%; --gl2:14%;
   --ok:#14774a; --warn:#a85a00; --danger:#b3261e;
   --scrim:rgba(8,10,14,.94);
-  --shadow:0 6px 22px rgba(40,60,120,.10),inset 0 1px 0 rgba(255,255,255,.9);
+  --shadow:0 14px 34px -14px rgba(40,60,120,.22),inset 0 1px 0 rgba(255,255,255,.95);
+  --glass-grad:linear-gradient(160deg,rgba(255,255,255,.92),rgba(255,255,255,.55));
+  --btn-grad:linear-gradient(160deg,rgba(255,255,255,.95),rgba(255,255,255,.6));
+  --edge:rgba(30,45,90,.14); --hi:rgba(255,255,255,.95);
+  --glowmax:.55;
   color-scheme:light;
 }
 *{box-sizing:border-box}
@@ -372,6 +380,34 @@ body.selmode .wrap{padding-bottom:calc(160px + env(safe-area-inset-bottom,0px))}
 .swatch .dot{width:34px;height:34px;border-radius:50%;box-shadow:0 4px 14px -4px rgba(0,0,0,.5),inset 0 0 0 1px rgba(255,255,255,.25)}
 .swatch[aria-pressed=true]{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent);background:var(--accent-soft);font-weight:600}
 #setWrap .sheet>*{flex:0 0 auto}
+
+/* ===== Glasiger und luftiger ===== */
+body::before{opacity:calc(var(--glow) * var(--glowmax));background:
+  radial-gradient(60% 30% at 95% 4%,color-mix(in srgb,var(--accent) 81%,transparent),transparent 70%),
+  radial-gradient(55% 26% at 0% 30%,color-mix(in srgb,var(--glow2) 74%,transparent),transparent 70%),
+  radial-gradient(50% 24% at 100% 58%,color-mix(in srgb,var(--glow2) 54%,transparent),transparent 70%),
+  radial-gradient(60% 26% at 0% 82%,color-mix(in srgb,var(--accent) 61%,transparent),transparent 70%),
+  radial-gradient(70% 26% at 100% 100%,color-mix(in srgb,var(--glow2) 68%,transparent),transparent 70%)}
+.panel,.card,.item,.filterpanel{background:var(--glass-grad);-webkit-backdrop-filter:blur(26px) saturate(170%);backdrop-filter:blur(26px) saturate(170%);border:1px solid var(--edge);box-shadow:var(--shadow)}
+.card,.item{padding:14px}
+.card{gap:10px}
+.thumb{border-radius:16px}
+.grid,.list{gap:18px}
+.wrap{padding-left:max(18px,env(safe-area-inset-left,0px));padding-right:max(18px,env(safe-area-inset-right,0px))}
+.top{margin-bottom:20px}
+.btn,input[type=search],input[type=text],input[type=number],select,.syncbox summary{background:var(--btn-grad);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);border:1px solid var(--edge);box-shadow:inset 0 1px 0 var(--hi)}
+.btn,.iconbtn,.gearbtn{border-radius:20px}
+.btn.primary,.btn[aria-pressed=true],.seg button[aria-pressed=true]{background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 92%,#fff),var(--accent2));border-color:transparent}
+.btn.primary{box-shadow:0 10px 26px -8px color-mix(in srgb,var(--accent) 80%,transparent),inset 0 1px 0 rgba(255,255,255,.45)}
+.bottomnav{background:var(--glass-grad),color-mix(in srgb,var(--surface) 55%,transparent);-webkit-backdrop-filter:blur(30px) saturate(170%);backdrop-filter:blur(30px) saturate(170%);border-color:var(--edge);border-radius:34px;padding:8px;box-shadow:0 18px 40px -10px rgba(0,0,0,.4),inset 0 1px 0 var(--hi)}
+.bottomnav button[aria-selected=true]{background:linear-gradient(160deg,color-mix(in srgb,var(--accent) 34%,transparent),color-mix(in srgb,var(--accent) 12%,transparent));box-shadow:inset 0 1px 0 var(--hi),0 6px 18px -8px var(--accent)}
+.valuehead{padding:22px;background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 30%,transparent),var(--glass-grad));-webkit-backdrop-filter:blur(26px);backdrop-filter:blur(26px)}
+.card.sel,.item.sel{background:var(--accent-soft)}
+h1{font-size:1.7rem}
+.slider{display:flex;flex-direction:column;gap:6px}
+.slider .flabel{display:flex;justify-content:space-between;gap:10px}
+.slider input[type=range]{width:100%;margin:6px 0 0;accent-color:var(--accent);background:none;border:0;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none;padding:0;height:28px}
+.slider .ends{display:flex;justify-content:space-between;font-size:.78rem;color:var(--muted)}
 </style>
 <script>
 (function () {
@@ -384,14 +420,15 @@ body.selmode .wrap{padding-bottom:calc(160px + env(safe-area-inset-bottom,0px))}
     { id: 'gruen', name: 'Grün', d: ['#4fdc8e', '#2fd0c0'], l: ['#14774a', '#0b8a78'], g: '#2f6bff' },
     { id: 'rosa', name: 'Rosa', d: ['#ff6fae', '#ff8a5c'], l: ['#c4246e', '#d0501f'], g: '#7a5cff' }
   ];
-  var DEF = { accent: 'koralle', mode: 'dark', glow: true };
+  var DEF = { accent: 'koralle', mode: 'dark', glow: 74 };
   var look = { accent: DEF.accent, mode: DEF.mode, glow: DEF.glow };
   try {
     var s = JSON.parse(localStorage.getItem(KEY));
     if (s && typeof s === 'object') {
       if (PRESETS.some(function (p) { return p.id === s.accent; })) look.accent = s.accent;
       if (s.mode === 'dark' || s.mode === 'light' || s.mode === 'system') look.mode = s.mode;
-      if (s.glow === false) look.glow = false;
+      if (s.glow === false) look.glow = 0;
+      else if (typeof s.glow === 'number' && isFinite(s.glow)) look.glow = Math.max(0, Math.min(100, Math.round(s.glow)));
     }
   } catch (e) {}
   var mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
@@ -400,7 +437,8 @@ body.selmode .wrap{padding-bottom:calc(160px + env(safe-area-inset-bottom,0px))}
   function apply() {
     var m = effective(), p = preset(), c = m === 'dark' ? p.d : p.l, st = root.style;
     root.setAttribute('data-theme', m);
-    root.setAttribute('data-glow', look.glow ? 'on' : 'off');
+    root.setAttribute('data-glow', look.glow > 0 ? 'on' : 'off');
+    st.setProperty('--glow', String(look.glow / 100));
     st.setProperty('--accent', c[0]); st.setProperty('--accent2', c[1]); st.setProperty('--glow2', p.g);
     st.setProperty('--accent-ink', m === 'dark' ? '#0a0f1f' : '#ffffff');
     var meta = document.querySelector('meta[name="theme-color"]');
@@ -421,7 +459,8 @@ body.selmode .wrap{padding-bottom:calc(160px + env(safe-area-inset-bottom,0px))}
       b.setAttribute('aria-pressed', String(p.id === look.accent));
     });
     Array.prototype.forEach.call($('setMode').children, function (b) { b.setAttribute('aria-pressed', String(b.dataset.mode === look.mode)); });
-    $('setGlow').checked = look.glow;
+    $('setGlow').value = String(look.glow);
+    $('setGlowVal').textContent = look.glow + ' %';
   }
   function build() {
     if (!$('setWrap')) return;
@@ -436,7 +475,8 @@ body.selmode .wrap{padding-bottom:calc(160px + env(safe-area-inset-bottom,0px))}
     Array.prototype.forEach.call($('setMode').children, function (b) {
       b.addEventListener('click', function () { look.mode = b.dataset.mode; store(); apply(); paint(); });
     });
-    $('setGlow').addEventListener('change', function () { look.glow = this.checked; store(); apply(); });
+    $('setGlow').addEventListener('input', function () { look.glow = Number(this.value) || 0; $('setGlowVal').textContent = look.glow + ' %'; apply(); });
+    $('setGlow').addEventListener('change', store);
     $('setReset').addEventListener('click', function () { look = { accent: DEF.accent, mode: DEF.mode, glow: DEF.glow }; store(); apply(); paint(); });
     built = true; paint();
     function open() { paint(); $('setWrap').hidden = false; $('setWrap').querySelector('.sheet').scrollTop = 0; setTimeout(function () { $('setClose').focus(); }, 30); }
@@ -725,7 +765,11 @@ body.selmode .wrap{padding-bottom:calc(160px + env(safe-area-inset-bottom,0px))}
       <button type="button" data-mode="light" aria-pressed="false">Hell</button>
       <button type="button" data-mode="system" aria-pressed="false">Wie Gerät</button>
     </div>
-    <label class="swrow"><input type="checkbox" class="switch" id="setGlow"><span>Farbiger Hintergrund</span></label>
+    <div class="slider">
+      <div class="flabel"><label for="setGlow">Farbiger Hintergrund</label><span id="setGlowVal">74 %</span></div>
+      <input type="range" id="setGlow" min="0" max="100" step="1">
+      <div class="ends"><span>keine</span><span>sehr viel</span></div>
+    </div>
     <div class="meta">Die Auswahl gilt nur für dieses Gerät und ändert nichts an deinen Daten.</div>
     <div class="row"><button class="btn small" id="setReset" type="button">Zurücksetzen</button></div>
   </div>
