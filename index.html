@@ -130,6 +130,29 @@ input[type=number]{width:130px}
 .statbtn svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 #statWrap .sheet>*,#scanWrap .sheet>*{flex:0 0 auto}
 .iconbtn{width:46px;height:46px;padding:0;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.card,.item{position:relative;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+.card img,.item img{-webkit-user-drag:none}
+.item input,.item select{-webkit-user-select:text;user-select:text}
+.chg{display:inline-flex;vertical-align:-1px;margin-left:4px}
+.chg svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+.chg.up{color:var(--ok)}
+.chg.down{color:var(--danger)}
+.selmark{display:none;position:absolute;top:10px;left:10px;z-index:3;width:24px;height:24px;border-radius:50%;border:2px solid var(--muted);background:var(--surface);align-items:center;justify-content:center;pointer-events:none}
+body.selmode .selmark{display:flex}
+.card.sel,.item.sel{outline:2px solid var(--accent);outline-offset:-2px;background:var(--accent-soft)}
+.sel>.selmark{background:var(--accent);border-color:var(--accent)}
+.sel>.selmark::after{content:"";width:6px;height:11px;border:solid var(--bg);border-width:0 2.5px 2.5px 0;transform:rotate(45deg) translate(-1px,-1px)}
+body.selmode .bottomnav{visibility:hidden}
+body.selmode .wrap{padding-bottom:calc(150px + env(safe-area-inset-bottom,0px))}
+.selbar{position:fixed;left:0;right:0;bottom:0;z-index:45;background:var(--surface);border-top:1px solid var(--line);box-shadow:0 -4px 16px rgba(0,0,0,.1);padding:8px max(12px,env(safe-area-inset-right,0px)) calc(8px + env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px))}
+.selbar[hidden]{display:none}
+.selbar .inner{max-width:980px;margin:0 auto;display:flex;flex-direction:column;gap:8px}
+.selbar .top{display:flex;align-items:center;gap:10px}
+.selcount{flex:1 1 auto;font-weight:700}
+.selacts{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.selacts .btn{flex:1 1 0;min-width:0;white-space:normal}
+.selacts select{flex:1 1 140px;min-width:0}
+.selacts .meta{flex:1 1 100%}
 .iconbtn.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
 .iconbtn svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .sc-live{position:relative;border-radius:12px;overflow:hidden;background:#000;width:100%;margin:0 auto;aspect-ratio:3/4}
@@ -492,6 +515,17 @@ input[type=number]{width:130px}
     </button>
   </div>
 </nav>
+
+<div id="selbar" class="selbar" role="toolbar" aria-label="Auswahl" hidden>
+  <div class="inner">
+    <div class="top">
+      <button class="btn small" id="selClose" type="button" aria-label="Auswahl beenden">Abbrechen</button>
+      <span id="selCount" class="selcount" aria-live="polite">0 ausgewählt</span>
+      <button class="btn small" id="selAll" type="button">Alle</button>
+    </div>
+    <div class="selacts" id="selActs"></div>
+  </div>
+</div>
 
 <div id="toast" class="toast" role="status" aria-live="polite" hidden>
   <span id="toastMsg"></span>
@@ -2143,6 +2177,7 @@ input[type=number]{width:130px}
     sel.value = flt.rarity;
   }
   function applyView() {
+    selExitSearch();
     var v = viewCtx;
     if (!v) { renderFilterChips(); return; }
     var lang = v.lang, t = ++token;
@@ -2454,6 +2489,7 @@ input[type=number]{width:130px}
       .then(function (s) { return Array.isArray(s.cards) ? s.cards : []; }));
   }
   function showSet(keep) {
+    selExitSearch();
     var lang = state.lang, id = curSet, t = ++token;
     if (!keep) flt.rarity = '';
     baseList = []; viewCtx = null;
@@ -2518,6 +2554,7 @@ input[type=number]{width:130px}
       numWanted = parseInt(nm[1], 10);
       q = raw.replace(nm[0], ' ').replace(/\s+/g, ' ').trim();
     }
+    selExitSearch();
     if (!q) {
       setStatus('Gib zusätzlich zur Nummer einen Kartennamen an, zum Beispiel „Glurak 4/102“. Eine Nummer allein ist nicht eindeutig, sie wiederholt sich in jedem Set.', true);
       return;
@@ -2553,6 +2590,7 @@ input[type=number]{width:130px}
       });
   }
   function searchArtist(raw) {
+    selExitSearch();
     var t = ++token, lang = state.lang;
     setStatus('Künstler-Suche läuft …');
     baseList = []; viewCtx = null; results = []; shown = 0;
@@ -2585,6 +2623,7 @@ input[type=number]{width:130px}
       };
     });
     refreshOwnHints();
+    selApply();
     pool(tasks, 6).then(function () {
       if (t !== token) return;
       refreshRarityOptions();
@@ -2684,10 +2723,14 @@ input[type=number]{width:130px}
       onclick: function () { openViewer(idx); }
     }, thumb);
     var node = el('article', { class: 'card' },
+      el('span', { class: 'selmark', 'aria-hidden': 'true' }),
       zoomBtn,
       el('div', { class: 'cname', text: base.name || base.id }),
       meta, el('div', { class: 'own' }), priceLine, varSel, actions);
-    node.dataset.cid = base.id; node.dataset.lang = lang;
+    node.dataset.cid = base.id; node.dataset.lang = lang; node.dataset.selkey = lang + ':' + base.id;
+    node._variant = function () { return variant; };
+    node._detail = function () { return detail; };
+    node._base = base;
     return {
       node: node,
       fill: function (card) {
@@ -2713,6 +2756,11 @@ input[type=number]{width:130px}
     return state.collections.find(function (c) { return c.id === id; }) || null;
   }
   function addCard(lang, card, kind, colId, variant) {
+    addCardRaw(lang, card, kind, colId, variant);
+    save(); renderCollection();
+  }
+  /* ohne Speichern und Neuzeichnen, damit eine Mehrfachauswahl nur einmal speichert */
+  function addCardRaw(lang, card, kind, colId, variant) {
     variant = variant === 'reverse' ? 'reverse' : 'normal';
     var col = (colId && collById(colId)) || active();
     var list = listOf(col, kind || 'items');
@@ -2732,7 +2780,6 @@ input[type=number]{width:130px}
         price: priceFrom(card, variant), manual: null, added: Date.now()
       });
     }
-    save(); renderCollection();
   }
   function changeVariant(item, v) {
     v = v === 'reverse' ? 'reverse' : 'normal';
@@ -2755,10 +2802,226 @@ input[type=number]{width:130px}
     save(); renderCollection();
     getCard(item.lang, item.id).then(function (card) {
       item.price = priceFrom(card, v);
+      item.chg = null;
       item.rev = hasReverse(card);
       item.base = baseLabel(card);
     }).catch(function () {}).then(function () { save(); renderCollection(); });
   }
+
+  /* ---------- Mehrfachauswahl (Karte gedrückt halten) ---------- */
+  var sel = { on: false, ctx: '', col: '', keys: {}, step: null };
+  var LP_MS = 450, lp = null, lpFired = false;
+  function selCount() { return Object.keys(sel.keys).length; }
+  function selNodes() { return Array.prototype.slice.call(document.querySelectorAll(sel.ctx === 'search' ? '#results .card' : '#list .item')); }
+  function selApply() {
+    document.querySelectorAll('#results .card, #list .item').forEach(function (nd) {
+      var isTile = nd.classList.contains('card');
+      var on = sel.on && (isTile === (sel.ctx === 'search')) && !!sel.keys[nd.dataset.selkey];
+      nd.classList.toggle('sel', on);
+    });
+  }
+  /* Einträge, die es nicht mehr gibt (z. B. nach Synchronisation), aus der Auswahl nehmen */
+  function selPrune() {
+    if (!sel.on || sel.ctx === 'search') return;
+    var present = {};
+    selNodes().forEach(function (nd) { present[nd.dataset.selkey] = true; });
+    Object.keys(sel.keys).forEach(function (k) { if (!present[k]) delete sel.keys[k]; });
+    if (!selCount()) { selExit(); return; }
+    selApply(); selBar();
+  }
+  function selContext() { return $('#view-search').hidden ? curKind : 'search'; }
+  function selStart(node) {
+    sel.on = true; sel.ctx = selContext(); sel.col = state.active; sel.keys = {}; sel.step = null;
+    sel.keys[node.dataset.selkey] = true;
+    selApply(); selBar();
+  }
+  function selExit() {
+    if (!sel.on && !selCount()) return;
+    sel.on = false; sel.keys = {}; sel.step = null;
+    selApply(); selBar();
+  }
+  function selExitSearch() { if (sel.on && sel.ctx === 'search') selExit(); }
+  function selToggle(node) {
+    var k = node.dataset.selkey;
+    if (sel.keys[k]) delete sel.keys[k]; else sel.keys[k] = true;
+    sel.step = null;
+    if (!selCount()) { selExit(); return; }
+    selApply(); selBar();
+  }
+  function selAll() {
+    var nodes = selNodes();
+    var every = nodes.length && nodes.every(function (nd) { return sel.keys[nd.dataset.selkey]; });
+    nodes.forEach(function (nd) { if (every) delete sel.keys[nd.dataset.selkey]; else sel.keys[nd.dataset.selkey] = true; });
+    sel.step = null;
+    if (!selCount()) { selExit(); return; }
+    selApply(); selBar();
+  }
+  function selChoose(label, cols, def, go) {
+    sel.step = { label: label, cols: cols, def: def, go: go };
+    selBar();
+  }
+  function selBar() {
+    $('#selbar').hidden = !sel.on;
+    document.body.classList.toggle('selmode', sel.on);
+    var acts = $('#selActs');
+    acts.replaceChildren();
+    if (!sel.on) return;
+    var n = selCount();
+    $('#selCount').textContent = n === 1 ? '1 ausgewählt' : n + ' ausgewählt';
+    var allOn = selNodes().length > 0 && selNodes().every(function (nd) { return sel.keys[nd.dataset.selkey]; });
+    $('#selAll').textContent = allOn ? 'Keine' : 'Alle';
+    if (sel.step) {
+      var st = sel.step;
+      var dd = el('select', { 'aria-label': 'Sammlung wählen' });
+      st.cols.forEach(function (c) {
+        var o = el('option', { value: c.id, text: c.name });
+        if (c.id === st.def) o.selected = true;
+        dd.append(o);
+      });
+      acts.append(el('span', { class: 'meta', text: st.label }), dd,
+        el('button', { class: 'btn small primary', type: 'button', text: 'OK', onclick: function () { st.go(dd.value); } }),
+        el('button', { class: 'btn small', type: 'button', text: 'Zurück', onclick: function () { sel.step = null; selBar(); } }));
+      return;
+    }
+    var cols = state.collections;
+    if (sel.ctx === 'search') {
+      acts.append(
+        el('button', { class: 'btn small primary', type: 'button', text: 'In Sammlung', onclick: function () {
+          if (cols.length < 2) selSearchAdd('items', active().id);
+          else selChoose('In welche Sammlung?', cols, active().id, function (id) { selSearchAdd('items', id); });
+        } }),
+        el('button', { class: 'btn small', type: 'button', text: 'Wunschliste', onclick: function () { selSearchAdd('wish', null); } }));
+    } else if (sel.ctx === 'wish') {
+      acts.append(
+        el('button', { class: 'btn small primary', type: 'button', text: 'In Sammlung', onclick: function () {
+          if (cols.length < 2) selFromWish(active().id);
+          else selChoose('In welche Sammlung?', cols, active().id, selFromWish);
+        } }),
+        el('button', { class: 'btn small danger', type: 'button', text: 'Löschen', onclick: selDelete }));
+    } else {
+      var others = cols.filter(function (c) { return c.id !== state.active; });
+      if (others.length) acts.append(el('button', { class: 'btn small primary', type: 'button', text: 'Verschieben', onclick: function () {
+        selChoose('In welche Sammlung verschieben?', others, others[0].id, selMove);
+      } }));
+      acts.append(el('button', { class: 'btn small danger', type: 'button', text: 'Löschen', onclick: selDelete }));
+    }
+  }
+  function selSearchAdd(kind, colId) {
+    var nodes = Array.prototype.slice.call(document.querySelectorAll('#results .card.sel'));
+    if (!nodes.length) return;
+    var infos = nodes.map(function (nd) {
+      return { lang: nd.dataset.lang, id: nd.dataset.cid, variant: nd._variant ? nd._variant() : 'normal', base: nd._base, card: nd._detail ? nd._detail() : null };
+    });
+    $('#selActs').replaceChildren(el('span', { class: 'meta', text: 'Wird gespeichert …' }));
+    pool(infos.map(function (inf) {
+      return function () {
+        if (inf.card) return Promise.resolve();
+        return getCard(inf.lang, inf.id).then(function (c) { inf.card = c; }).catch(function () {});
+      };
+    }), 6).then(function () {
+      var snap = JSON.stringify(state);
+      infos.forEach(function (inf) {
+        if (inf.card) addCardRaw(inf.lang, inf.card, kind, colId, inf.variant);
+        else addCardRaw(inf.lang, inf.base, kind, colId, 'normal');
+      });
+      save(); renderCollection();
+      var col = collById(colId) || active(), n = infos.length;
+      selExit();
+      offerUndo(n + (n === 1 ? ' Karte ' : ' Karten ') + (kind === 'wish' ? 'auf die Wunschliste' : 'in „' + col.name + '“') + ' gespeichert', snap);
+    });
+  }
+  function mergeOne(list, item, stamp) {
+    var ex = list.find(function (i) { return i.key === item.key; });
+    if (ex) {
+      ex.qty += item.qty;
+      if (typeof item.manual === 'number' && typeof ex.manual !== 'number') ex.manual = item.manual;
+    } else {
+      if (stamp) item.added = Date.now();
+      list.push(item);
+    }
+  }
+  function selDelete() {
+    var col = active(), snap = JSON.stringify(state), keys = sel.keys;
+    var all = listOf(col), rest = all.filter(function (i) { return !keys[i.key]; });
+    var n = all.length - rest.length;
+    if (curKind === 'wish') state.wish = rest; else col.items = rest;
+    save(); selExit(); renderCollection();
+    offerUndo(n === 1 ? '1 Eintrag entfernt' : n + ' Einträge entfernt', snap);
+  }
+  function selMove(toId) {
+    var col = active(), to = collById(toId);
+    if (!to || to === col) return;
+    var snap = JSON.stringify(state), keys = sel.keys;
+    var moving = (col.items || []).filter(function (i) { return keys[i.key]; });
+    col.items = (col.items || []).filter(function (i) { return !keys[i.key]; });
+    if (!Array.isArray(to.items)) to.items = [];
+    moving.forEach(function (i) { mergeOne(to.items, i, false); });
+    save(); selExit(); renderCollection();
+    offerUndo(moving.length + (moving.length === 1 ? ' Eintrag' : ' Einträge') + ' nach „' + to.name + '“ verschoben', snap);
+  }
+  function selFromWish(toId) {
+    var to = collById(toId) || active(), snap = JSON.stringify(state), keys = sel.keys;
+    var moving = (state.wish || []).filter(function (i) { return keys[i.key]; });
+    state.wish = (state.wish || []).filter(function (i) { return !keys[i.key]; });
+    if (!Array.isArray(to.items)) to.items = [];
+    moving.forEach(function (i) { mergeOne(to.items, i, true); });
+    save(); selExit(); renderCollection();
+    offerUndo(moving.length + (moving.length === 1 ? ' Karte' : ' Karten') + ' in „' + to.name + '“ übernommen', snap);
+  }
+  /* Gedrückt halten startet die Auswahl; danach wählt ein Tippen aus oder ab. */
+  function lpNode(e) {
+    var t = e.target;
+    if (!t || !t.closest) return null;
+    if (t.closest('input, select, textarea, a, .qty, .ctrl, .choice')) return null;
+    return t.closest('#results .card, #list .item');
+  }
+  function lpClear() { if (lp) { clearTimeout(lp.timer); lp = null; } }
+  document.addEventListener('pointerdown', function (e) {
+    lpClear();
+    if (sel.on || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    var node = lpNode(e);
+    if (!node) return;
+    lp = { x: e.clientX, y: e.clientY, timer: setTimeout(function () {
+      lp = null; lpFired = true;
+      try { if (navigator.vibrate) navigator.vibrate(18); } catch (x) {}
+      selStart(node);
+    }, LP_MS) };
+  });
+  document.addEventListener('pointermove', function (e) {
+    if (lp && Math.abs(e.clientX - lp.x) + Math.abs(e.clientY - lp.y) > 12) lpClear();
+  });
+  ['pointerup', 'pointercancel', 'scroll'].forEach(function (n) {
+    document.addEventListener(n, function () {
+      lpClear();
+      if (lpFired) setTimeout(function () { lpFired = false; }, 250);
+    }, true);
+  });
+  document.addEventListener('contextmenu', function (e) {
+    var t = e.target;
+    if (!t || !t.closest || !t.closest('#results .card, #list .item')) return;
+    e.preventDefault();
+    var node = lpNode(e);
+    if (node && !sel.on) { lpClear(); lpFired = true; selStart(node); }
+  });
+  /* Der Klick, der nach dem langen Drücken noch folgt, darf nichts auslösen. */
+  document.addEventListener('click', function (e) {
+    if (lpFired) { lpFired = false; e.preventDefault(); e.stopPropagation(); }
+  }, true);
+  ['#results', '#list'].forEach(function (id) {
+    $(id).addEventListener('click', function (e) {
+      if (!sel.on) return;
+      var node = e.target.closest && e.target.closest('.card, .item');
+      if (!node) return;
+      e.preventDefault(); e.stopPropagation();
+      selToggle(node);
+    }, true);
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && sel.on && !e.defaultPrevented) selExit();
+  });
+  $('#selClose').addEventListener('click', selExit);
+  $('#selAll').addEventListener('click', selAll);
+
   /* ---------- Rückgängig ---------- */
   var undoSnap = null, undoVer = -1, toastTimer = null;
   function showToast(msg, withUndo) {
@@ -2938,6 +3201,7 @@ input[type=number]{width:130px}
   var openRows = {}; /* aufgeklappte Kartenzeilen, damit sie beim Neuzeichnen offen bleiben */
   var ovOpen = false;
   function renderCollection() {
+    if (sel.on && sel.ctx !== 'search' && (sel.ctx !== curKind || sel.col !== state.active)) selExit();
     updateSetProgress(); refreshOwnHints();
     renderSelect();
     renderOffline();
@@ -2968,7 +3232,10 @@ input[type=number]{width:130px}
       /* Kurzzeile: Preis pro Karte; Details mit Stand und Hinweisen stehen im aufgeklappten Bereich */
       var pl = el('span', { class: 'pl' });
       if (up) {
-        pl.append(el('span', { class: 'price', text: money(up.value) }), el('span', { class: 'meta', text: up.manual ? ' · eigener Preis' : ' pro Karte' }));
+        pl.append(el('span', { class: 'price', text: money(up.value) }));
+        var arrow = chgNode(item, up);
+        if (arrow) pl.append(arrow);
+        pl.append(el('span', { class: 'meta', text: up.manual ? ' · eigener Preis' : ' pro Karte' }));
         if (isStale(item) && !up.manual) pl.append(el('span', { class: 'warnflag', text: ' · veraltet' }));
       } else pl.append(el('span', { class: 'price none', text: 'Kein Preis, bitte eintragen' }));
 
@@ -3030,7 +3297,8 @@ input[type=number]{width:130px}
         class: 'thumbbtn', type: 'button', 'aria-label': 'Karte vergrößern: ' + item.name,
         onclick: function () { openSaved(shownItems, idx); }
       }, thumb);
-      var article = el('article', { class: 'item' + (openRows[rk] ? ' open' : '') }, zoomBtn, main, side, ctrl);
+      var article = el('article', { class: 'item' + (openRows[rk] ? ' open' : '') }, el('span', { class: 'selmark', 'aria-hidden': 'true' }), zoomBtn, main, side, ctrl);
+      article.dataset.selkey = item.key;
       main.addEventListener('click', function () {
         var o = !article.classList.contains('open');
         article.classList.toggle('open', o);
@@ -3052,6 +3320,7 @@ input[type=number]{width:130px}
     var cItems = countOf('items'), cWish = countOf('wish');
     $('#countBadge').textContent = cItems ? '(' + cItems + ')' : '';
     $('#wishBadge').textContent = cWish ? '(' + cWish + ')' : '';
+    selPrune();
   }
 
   /* ---------- Preise aktualisieren ---------- */
@@ -3099,9 +3368,27 @@ input[type=number]{width:130px}
     item.base = baseLabel(card);
     var p = priceFrom(card, variantOf(item));
     if (!p) return false;
+    var old = item.price && typeof item.price.value === 'number' ? item.price.value : null;
     item.price = p;
     item.priceAt = Date.now();
+    /* Hat sich der Preis geändert, merken wir den vorherigen Wert für den kleinen Pfeil neben dem Preis */
+    if (old != null && Math.round(old * 100) !== Math.round(p.value * 100)) item.chg = { from: old, at: Date.now() };
     return true;
+  }
+  /* Pfeil neben dem Preis: grün hoch = teurer, rot runter = günstiger als beim vorherigen Stand. Gilt 14 Tage lang. */
+  var CHG_MS = 14 * 24 * 3600 * 1000;
+  function chgNode(item, up) {
+    var c = item.chg;
+    if (!up || up.manual || !c || typeof c.from !== 'number' || Date.now() - (c.at || 0) > CHG_MS) return null;
+    var a = Math.round(up.value * 100), b = Math.round(c.from * 100);
+    if (a === b) return null;
+    var rising = a > b;
+    var svg = svgEl('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' });
+    svg.append(svgEl('path', { d: rising ? 'M12 19V5M6 11l6-6 6 6' : 'M12 5v14M6 13l6 6 6-6' }));
+    var txt = (rising ? 'Preis gestiegen' : 'Preis gesunken') + ', vorher ' + money(c.from);
+    var n = el('span', { class: 'chg ' + (rising ? 'up' : 'down'), title: txt, role: 'img', 'aria-label': txt });
+    n.append(svg);
+    return n;
   }
   function setRefreshing(on) {
     refreshing = on;
@@ -3576,6 +3863,7 @@ input[type=number]{width:130px}
   $('#filterBtn').addEventListener('click', function () { setFilterOpen($('#filterPanel').hidden); });
 
   function showView(v) {
+    selExit();
     var s = v === 'search';
     setMenu(false);
     $('#view-search').hidden = !s;
