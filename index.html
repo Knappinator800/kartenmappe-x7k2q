@@ -458,8 +458,8 @@ h1{font-size:1.7rem}
     root.setAttribute('data-glow', look.glow > 0 ? 'on' : 'off');
     st.setProperty('--glow', String(look.glow / 100));
     /* Glasigkeit: ab 75 % wird die Tönung blasser und der Weichzeichner stärker, darunter werden die Flächen zunehmend fest */
-    var g = look.glass, solid = g >= 75 ? 0 : (75 - g) / 75 * 92, tint = g <= 75 ? 1 : 1 - (g - 75) / 25 * 0.55, bl = 14 + g * 0.16;
-    st.setProperty('--solid', solid.toFixed(1) + '%'); st.setProperty('--navsolid', (55 + solid * 0.4).toFixed(1) + '%');
+    var g = look.glass, solid = g >= 75 ? 0 : (75 - g) / 75 * 92, tint = g <= 75 ? 1 : 1 - (g - 75) / 25 * 0.92, bl = 14 + g * 0.16;
+    st.setProperty('--solid', solid.toFixed(1) + '%'); st.setProperty('--navsolid', (g > 75 ? 55 - (g - 75) / 25 * 40 : 55 + solid * 0.4).toFixed(1) + '%');
     st.setProperty('--tint', tint.toFixed(3));
     st.setProperty('--blur', bl.toFixed(1) + 'px'); st.setProperty('--blur-s', (bl * 0.7).toFixed(1) + 'px'); st.setProperty('--blur-l', (bl * 1.15).toFixed(1) + 'px');
     root.setAttribute('data-glass', g <= 3 ? 'off' : 'on');
