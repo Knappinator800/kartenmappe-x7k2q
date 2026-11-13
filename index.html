@@ -5258,18 +5258,30 @@ body.bdragging{-webkit-user-select:none;user-select:none;overflow:hidden}
     });
     bFit(b);
   }
-  function bAllOwned() {
+  function bAllOwned(colId) {
     var seen = {}, out = [];
-    state.collections.forEach(function (c) { (c.items || []).forEach(function (i) { if (i.qty > 0 && !seen[i.key]) { seen[i.key] = true; out.push(i); } }); });
+    state.collections.forEach(function (c) { if (colId && colId !== 'all' && c.id !== colId) return; (c.items || []).forEach(function (i) { if (i.qty > 0 && !seen[i.key]) { seen[i.key] = true; out.push(i); } }); });
     return out;
+  }
+  /* Quelle für Auswahl/Auto-Befüllen: 'all' (alle Sammlungen), 'wish' (Wunschliste) oder eine Sammlungs-ID */
+  function bPool(srcVal) {
+    if (srcVal === 'wish') return (state.wish || []).filter(function (i) { return i.qty > 0; });
+    return bAllOwned(srcVal);
+  }
+  function bSrcSelect(label, cur) {
+    var sel = el('select', { 'aria-label': label });
+    sel.append(el('option', { value: 'all', text: 'Alle Sammlungen' }));
+    state.collections.forEach(function (c) { sel.append(el('option', { value: c.id, text: c.name })); });
+    sel.append(el('option', { value: 'wish', text: 'Wunschliste' }));
+    sel.value = cur || 'all';
+    return sel;
   }
   function bPicker(b, startPos) {
     bSheet('Karten hinzufügen', function (sheet, api) {
-      var src = 'items', chosen = {}, order = [], q = '';
+      var src = 'all', chosen = {}, order = [], q = '';
       var inB = {}; b.slots.forEach(function (s) { if (s) inB[s.key] = true; });
-      var seg = el('div', { class: 'seg', role: 'group', 'aria-label': 'Quelle' });
-      var bs = el('button', { type: 'button', 'aria-pressed': 'true', text: 'Sammlung' }), bw = el('button', { type: 'button', 'aria-pressed': 'false', text: 'Wunschliste' });
-      seg.append(bs, bw);
+      var srcSel = bSrcSelect('Quelle der Karten', state.active && collById(state.active) ? state.active : 'all');
+      src = srcSel.value;
       var search = el('input', { type: 'search', placeholder: 'Name, Set oder Nummer', 'aria-label': 'Karten suchen' });
       var listEl = el('div', { class: 'setlist', style: 'max-height:38vh' });
       var go = bBtn('Hinzufügen', function () {
@@ -5282,12 +5294,12 @@ body.bdragging{-webkit-user-select:none;user-select:none;overflow:hidden}
       go.disabled = true;
       function upd() { go.textContent = order.filter(function (k) { return chosen[k]; }).length + ' hinzufügen'; go.disabled = !order.some(function (k) { return chosen[k]; }); }
       function draw() {
-        var pool0 = src === 'wish' ? (state.wish || []).filter(function (i) { return i.qty > 0; }) : bAllOwned();
+        var pool0 = bPool(src);
         var f = q.trim().toLowerCase();
         var res = pool0.filter(function (i) { return !f || [i.name, i.alt, i.set, i.number].join(' ').toLowerCase().indexOf(f) >= 0; });
         res.sort(function (a, c) { return String(a.name).localeCompare(String(c.name), 'de'); });
         listEl.replaceChildren();
-        if (!res.length) listEl.append(el('div', { class: 'bmeta', text: src === 'wish' ? 'Keine Karten auf der Wunschliste.' : 'Keine Karte gefunden.' }));
+        if (!res.length) listEl.append(el('div', { class: 'bmeta', text: src === 'wish' ? 'Keine Karten auf der Wunschliste.' : (f ? 'Keine Karte gefunden.' : 'Diese Sammlung ist leer.') }));
         res.slice(0, 60).forEach(function (i) {
           var dis = !!inB[i.key];
           var ck = el('span', { class: 'ck', text: chosen[i.key] ? '✓' : '' });
@@ -5303,10 +5315,9 @@ body.bdragging{-webkit-user-select:none;user-select:none;overflow:hidden}
         });
         if (res.length > 60) listEl.append(el('div', { class: 'bmeta', text: 'Es gibt mehr Treffer. Gib mehr vom Namen ein, um einzugrenzen.' }));
       }
-      bs.addEventListener('click', function () { src = 'items'; bs.setAttribute('aria-pressed', 'true'); bw.setAttribute('aria-pressed', 'false'); draw(); });
-      bw.addEventListener('click', function () { src = 'wish'; bw.setAttribute('aria-pressed', 'true'); bs.setAttribute('aria-pressed', 'false'); draw(); });
+      srcSel.addEventListener('change', function () { src = srcSel.value; draw(); });
       search.addEventListener('input', function () { q = search.value; draw(); });
-      sheet.append(el('div', { class: 'stack' }, seg, search), listEl, el('div', { class: 'stack' }, go));
+      sheet.append(el('div', { class: 'stack' }, srcSel, search), listEl, el('div', { class: 'stack' }, go));
       draw(); upd();
     });
   }
@@ -5523,7 +5534,8 @@ body.bdragging{-webkit-user-select:none;user-select:none;overflow:hidden}
       var chosen = el('div', { class: 'bmeta' });
       var setBox = el('div', null, el('div', { class: 'lbl', text: 'Sprache und Set' }), langSel, el('div', { style: 'height:8px' }), filter, chosen, list);
       var fill = el('input', { type: 'text', placeholder: 'z. B. Pikachu (leer lassen = leerer Binder)', 'aria-label': 'Karten automatisch einlegen' });
-      var freeBox = el('div', { hidden: true }, el('div', { class: 'lbl', text: 'Karten automatisch einlegen (optional)' }), fill, el('div', { class: 'bmeta', style: 'margin-top:6px', text: 'Legt alle Karten aus deiner Sammlung ein, deren Name den Text enthält. Danach kannst du alles verschieben.' }));
+      var fillSrc = bSrcSelect('Karten aus', 'all');
+      var freeBox = el('div', { hidden: true }, el('div', { class: 'lbl', text: 'Karten automatisch einlegen (optional)' }), fill, el('div', { class: 'lbl', style: 'margin-top:8px', text: 'Karten nehmen aus' }), fillSrc, el('div', { class: 'bmeta', style: 'margin-top:6px', text: 'Legt alle Karten aus der gewählten Sammlung (oder der Wunschliste) ein, deren Name den Text enthält. Danach kannst du alles verschieben.' }));
       function drawSets() {
         var f = filter.value.trim().toLowerCase();
         list.replaceChildren();
@@ -5570,7 +5582,7 @@ body.bdragging{-webkit-user-select:none;user-select:none;overflow:hidden}
           b.slots = []; b.pages = 1;
           var f = fill.value.trim().toLowerCase();
           if (f) {
-            var found = bAllOwned().filter(function (i) { return [i.name, i.alt].join(' ').toLowerCase().indexOf(f) >= 0; });
+            var found = bPool(fillSrc.value).filter(function (i) { return [i.name, i.alt].join(' ').toLowerCase().indexOf(f) >= 0; });
             found.sort(function (a, c) { return String(a.set).localeCompare(String(c.set), 'de') || String(a.number).localeCompare(String(c.number), 'de', { numeric: true }); });
             bNorm(b); bAddItems(b, found);
           }
