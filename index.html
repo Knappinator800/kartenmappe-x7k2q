@@ -527,6 +527,9 @@ body.bdragging{-webkit-user-select:none;user-select:none;overflow:hidden}
 .bsheet .stack .btn{width:100%;justify-content:center;padding:12px 14px}
 .bsheet .btn.left{justify-content:flex-start;text-align:left}
 .bsheet .lbl{font-size:.8rem;color:var(--muted);margin:14px 0 6px}
+.srcchips{display:flex;flex-wrap:wrap;gap:6px}
+.bsheet .srcchips .btn{width:auto;flex:0 0 auto;padding:7px 14px;min-height:0}
+.bsheet .stack .srcchips .btn{width:auto;padding:7px 14px}
 .bsheet input[type=text],.bsheet input[type=search],.bsheet input[type=number],.bsheet select{width:100%}
 .bsheet .detail{display:flex;gap:14px;align-items:center;margin-top:10px}
 .bsheet .detail .pocket{width:92px;flex:none}
@@ -5263,25 +5266,36 @@ body.bdragging{-webkit-user-select:none;user-select:none;overflow:hidden}
     state.collections.forEach(function (c) { if (colId && colId !== 'all' && c.id !== colId) return; (c.items || []).forEach(function (i) { if (i.qty > 0 && !seen[i.key]) { seen[i.key] = true; out.push(i); } }); });
     return out;
   }
-  /* Quelle für Auswahl/Auto-Befüllen: 'all' (alle Sammlungen), 'wish' (Wunschliste) oder eine Sammlungs-ID */
-  function bPool(srcVal) {
-    if (srcVal === 'wish') return (state.wish || []).filter(function (i) { return i.qty > 0; });
-    return bAllOwned(srcVal);
+  /* Quelle für Auswahl/Auto-Befüllen: Liste aus Sammlungs-IDs und/oder 'wish' (Wunschliste) */
+  function bPool(ids) {
+    var seen = {}, out = [];
+    function add(list) { list.forEach(function (i) { if (!seen[i.key]) { seen[i.key] = true; out.push(i); } }); }
+    state.collections.forEach(function (c) { if (ids.indexOf(c.id) >= 0) add((c.items || []).filter(function (i) { return i.qty > 0; })); });
+    if (ids.indexOf('wish') >= 0) add((state.wish || []).filter(function (i) { return i.qty > 0; }));
+    return out;
   }
-  function bSrcSelect(label, cur) {
-    var sel = el('select', { 'aria-label': label });
-    sel.append(el('option', { value: 'all', text: 'Alle Sammlungen' }));
-    state.collections.forEach(function (c) { sel.append(el('option', { value: c.id, text: c.name })); });
-    sel.append(el('option', { value: 'wish', text: 'Wunschliste' }));
-    sel.value = cur || 'all';
-    return sel;
+  /* Mehrfach-Auswahl als Chips: mindestens eine Quelle bleibt aktiv */
+  function bSrcChips(initial, onChange) {
+    var all = state.collections.map(function (c) { return { id: c.id, name: c.name }; }).concat([{ id: 'wish', name: 'Wunschliste' }]);
+    var on = {}; initial.forEach(function (id) { on[id] = true; });
+    var box = el('div', { class: 'srcchips', role: 'group', 'aria-label': 'Quellen der Karten' });
+    var btns = all.map(function (s) {
+      var b = el('button', { class: 'btn small', type: 'button', 'aria-pressed': String(!!on[s.id]), text: (s.id === 'wish' ? '♥ ' : '') + s.name });
+      b.addEventListener('click', function () {
+        if (on[s.id] && Object.keys(on).filter(function (k) { return on[k]; }).length === 1) return;
+        on[s.id] = !on[s.id]; b.setAttribute('aria-pressed', String(!!on[s.id])); if (onChange) onChange();
+      });
+      return b;
+    });
+    box.append.apply(box, btns);
+    return { node: box, get: function () { return all.filter(function (s) { return on[s.id]; }).map(function (s) { return s.id; }); },
+      all: function () { return all.map(function (s) { return s.id; }); } };
   }
   function bPicker(b, startPos) {
     bSheet('Karten hinzufügen', function (sheet, api) {
-      var src = 'all', chosen = {}, order = [], q = '';
+      var chosen = {}, order = [], q = '';
       var inB = {}; b.slots.forEach(function (s) { if (s) inB[s.key] = true; });
-      var srcSel = bSrcSelect('Quelle der Karten', state.active && collById(state.active) ? state.active : 'all');
-      src = srcSel.value;
+      var srcSel = bSrcChips([state.active && collById(state.active) ? state.active : state.collections[0].id], function () { draw(); });
       var search = el('input', { type: 'search', placeholder: 'Name, Set oder Nummer', 'aria-label': 'Karten suchen' });
       var listEl = el('div', { class: 'setlist', style: 'max-height:38vh' });
       var go = bBtn('Hinzufügen', function () {
@@ -5294,12 +5308,12 @@ body.bdragging{-webkit-user-select:none;user-select:none;overflow:hidden}
       go.disabled = true;
       function upd() { go.textContent = order.filter(function (k) { return chosen[k]; }).length + ' hinzufügen'; go.disabled = !order.some(function (k) { return chosen[k]; }); }
       function draw() {
-        var pool0 = bPool(src);
+        var pool0 = bPool(srcSel.get());
         var f = q.trim().toLowerCase();
         var res = pool0.filter(function (i) { return !f || [i.name, i.alt, i.set, i.number].join(' ').toLowerCase().indexOf(f) >= 0; });
         res.sort(function (a, c) { return String(a.name).localeCompare(String(c.name), 'de'); });
         listEl.replaceChildren();
-        if (!res.length) listEl.append(el('div', { class: 'bmeta', text: src === 'wish' ? 'Keine Karten auf der Wunschliste.' : (f ? 'Keine Karte gefunden.' : 'Diese Sammlung ist leer.') }));
+        if (!res.length) listEl.append(el('div', { class: 'bmeta', text: f ? 'Keine Karte gefunden.' : 'Keine Karten in dieser Auswahl.' }));
         res.slice(0, 60).forEach(function (i) {
           var dis = !!inB[i.key];
           var ck = el('span', { class: 'ck', text: chosen[i.key] ? '✓' : '' });
@@ -5315,9 +5329,8 @@ body.bdragging{-webkit-user-select:none;user-select:none;overflow:hidden}
         });
         if (res.length > 60) listEl.append(el('div', { class: 'bmeta', text: 'Es gibt mehr Treffer. Gib mehr vom Namen ein, um einzugrenzen.' }));
       }
-      srcSel.addEventListener('change', function () { src = srcSel.value; draw(); });
       search.addEventListener('input', function () { q = search.value; draw(); });
-      sheet.append(el('div', { class: 'stack' }, srcSel, search), listEl, el('div', { class: 'stack' }, go));
+      sheet.append(el('div', { class: 'stack' }, el('div', { class: 'lbl', text: 'Karten anzeigen aus' }), srcSel.node, search), listEl, el('div', { class: 'stack' }, go));
       draw(); upd();
     });
   }
@@ -5534,8 +5547,8 @@ body.bdragging{-webkit-user-select:none;user-select:none;overflow:hidden}
       var chosen = el('div', { class: 'bmeta' });
       var setBox = el('div', null, el('div', { class: 'lbl', text: 'Sprache und Set' }), langSel, el('div', { style: 'height:8px' }), filter, chosen, list);
       var fill = el('input', { type: 'text', placeholder: 'z. B. Pikachu (leer lassen = leerer Binder)', 'aria-label': 'Karten automatisch einlegen' });
-      var fillSrc = bSrcSelect('Karten aus', 'all');
-      var freeBox = el('div', { hidden: true }, el('div', { class: 'lbl', text: 'Karten automatisch einlegen (optional)' }), fill, el('div', { class: 'lbl', style: 'margin-top:8px', text: 'Karten nehmen aus' }), fillSrc, el('div', { class: 'bmeta', style: 'margin-top:6px', text: 'Legt alle Karten aus der gewählten Sammlung (oder der Wunschliste) ein, deren Name den Text enthält. Danach kannst du alles verschieben.' }));
+      var fillSrc = bSrcChips(state.collections.map(function (c) { return c.id; }));
+      var freeBox = el('div', { hidden: true }, el('div', { class: 'lbl', text: 'Karten automatisch einlegen (optional)' }), fill, el('div', { class: 'lbl', style: 'margin-top:8px', text: 'Karten nehmen aus' }), fillSrc.node, el('div', { class: 'bmeta', style: 'margin-top:6px', text: 'Legt alle Karten aus den gewählten Sammlungen (und/oder der Wunschliste) ein, deren Name den Text enthält. Danach kannst du alles verschieben.' }));
       function drawSets() {
         var f = filter.value.trim().toLowerCase();
         list.replaceChildren();
@@ -5582,7 +5595,7 @@ body.bdragging{-webkit-user-select:none;user-select:none;overflow:hidden}
           b.slots = []; b.pages = 1;
           var f = fill.value.trim().toLowerCase();
           if (f) {
-            var found = bPool(fillSrc.value).filter(function (i) { return [i.name, i.alt].join(' ').toLowerCase().indexOf(f) >= 0; });
+            var found = bPool(fillSrc.get()).filter(function (i) { return [i.name, i.alt].join(' ').toLowerCase().indexOf(f) >= 0; });
             found.sort(function (a, c) { return String(a.set).localeCompare(String(c.set), 'de') || String(a.number).localeCompare(String(c.number), 'de', { numeric: true }); });
             bNorm(b); bAddItems(b, found);
           }
