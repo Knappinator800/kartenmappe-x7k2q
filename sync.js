@@ -14,6 +14,7 @@
   var META_KEY = 'pokesammlung.sync.v1';
   var WISH = '_wish';
   var HIST = '_hist';
+  var BIND = '_bind';
   var MAX_BYTES = 900000;
 
   var auth = null, db = null, user = null, unsubs = [], timer = null, flushing = false, ptimer = null, pflushing = false;
@@ -243,13 +244,15 @@
     Promise.all([
       base.collection('collections').get({ source: 'server' }),
       base.collection('meta').doc('wish').get({ source: 'server' }),
-      base.collection('meta').doc('history').get({ source: 'server' })
+      base.collection('meta').doc('history').get({ source: 'server' }),
+      base.collection('meta').doc('binders').get({ source: 'server' }).catch(function () { return null; })
     ]).then(function (r) {
       if (user !== u) return;
-      var cloud = { cols: [], wish: null, hist: null };
+      var cloud = { cols: [], wish: null, hist: null, bind: null };
       r[0].forEach(function (d) { cloud.cols.push({ id: d.id, data: d.data() || {} }); });
       if (r[1].exists) cloud.wish = r[1].data();
       if (r[2].exists) cloud.hist = r[2].data();
+      if (r[3] && r[3].exists) cloud.bind = r[3].data();
       var cHas = cloudHas(cloud), lHas = localHas();
       if (cHas && lHas) {
         ui.cloud = cloud; ui.phase = 'deciding'; ui.msg = ''; render();
@@ -289,6 +292,17 @@
     });
     return Object.keys(map).sort().map(function (k) { return map[k]; });
   }
+  /* Binder: je Binder zählt die neuere Änderung (Feld u); gelöschte bleiben als Marke (del) erhalten. */
+  function mergeBinders(a, b) {
+    var pos = {}, out = [];
+    (a || []).concat(b || []).forEach(function (x) {
+      if (!x || !x.id) return;
+      if (pos[x.id] === undefined) { pos[x.id] = out.length; out.push(x); return; }
+      if ((Number(x.u) || 0) > (Number(out[pos[x.id]].u) || 0)) out[pos[x.id]] = x;
+    });
+    return out;
+  }
+  function cloudBind(cloud) { return cloud.bind && !cloud.bind.deleted ? (cloud.bind.items || []) : []; }
   function cloudHist(cloud) { return cloud.hist && !cloud.hist.deleted ? (cloud.hist.items || []) : []; }
 
   function apply(kind, cloud) {
@@ -302,14 +316,17 @@
         .sort(function (a, b) { return a.name.localeCompare(b.name, 'de'); });
       st.wish = cloud.wish && !cloud.wish.deleted ? (cloud.wish.items || []) : [];
       st.history = cloudHist(cloud);
+      st.binders = cloudBind(cloud);
       cloud.cols.forEach(function (c) { meta.upd[c.id] = Number(c.data.updatedAt) || 0; });
       if (cloud.wish) meta.upd[WISH] = Number(cloud.wish.updatedAt) || 0;
       if (cloud.hist) meta.upd[HIST] = Number(cloud.hist.updatedAt) || 0;
+      if (cloud.bind) meta.upd[BIND] = Number(cloud.bind.updatedAt) || 0;
       App.applyState(st);
       /* gespeicherte Signaturen des übernommenen Stands */
       App.getState().collections.forEach(function (c) { meta.sig[c.id] = sig({ name: c.name, items: c.items || [] }); });
       meta.sig[WISH] = sig({ items: App.getState().wish || [] });
       meta.sig[HIST] = sig({ items: App.getState().history || [] });
+      meta.sig[BIND] = sig({ items: cloudBind(cloud) });
     } else {
       if (kind === 'merge') {
         live.forEach(function (c) {
@@ -319,6 +336,7 @@
         });
         if (cloud.wish && !cloud.wish.deleted) st.wish = mergeItems(st.wish || [], cloud.wish.items || []);
         st.history = mergeHist(st.history || [], cloudHist(cloud));
+        st.binders = mergeBinders(st.binders || [], cloudBind(cloud));
         App.applyState(st);
       } else if (kind === 'upload') {
         var keep = {};
@@ -332,6 +350,8 @@
       });
       meta.sig[WISH] = sig({ items: cur.wish || [] }); meta.upd[WISH] = t; meta.dirty[WISH] = true;
       meta.sig[HIST] = sig({ items: cur.history || [] }); meta.upd[HIST] = t; meta.dirty[HIST] = true;
+      meta.sig[BIND] = sig({ items: cur.binders || [] });
+      if ((cur.binders || []).length) { meta.upd[BIND] = t; meta.dirty[BIND] = true; }
     }
     meta.uid = u.uid; saveMeta();
     ui.cloud = null; ui.phase = 'in';
@@ -346,6 +366,7 @@
     st.collections.forEach(function (c) { d[c.id] = { name: c.name, items: c.items || [] }; });
     d[WISH] = { items: st.wish || [] };
     d[HIST] = { items: st.history || [] };
+    d[BIND] = { items: st.binders || [] };
     return d;
   }
   function changed() {
@@ -353,7 +374,7 @@
     var docs = localDocs(), t = Date.now(), any = false;
     Object.keys(docs).forEach(function (id) {
       var s = sig(docs[id]);
-      if (id === HIST && meta.sig[id] === undefined && !(docs[id].items || []).length) { meta.sig[id] = s; return; }
+      if ((id === HIST || id === BIND) && meta.sig[id] === undefined && !(docs[id].items || []).length) { meta.sig[id] = s; return; }
       if (meta.sig[id] !== s) { meta.sig[id] = s; meta.upd[id] = t; meta.dirty[id] = true; delete meta.del[id]; any = true; }
     });
     Object.keys(meta.sig).forEach(function (id) {
@@ -366,6 +387,7 @@
     var base = baseRef(user);
     if (id === WISH) return base.collection('meta').doc('wish');
     if (id === HIST) return base.collection('meta').doc('history');
+    if (id === BIND) return base.collection('meta').doc('binders');
     return base.collection('collections').doc(id);
   }
   function flush() {
@@ -467,6 +489,12 @@
         meta.sig[id] = sig({ items: remote });
         any = true; return;
       }
+      if (id === BIND) {
+        var rb = d.deleted ? [] : (d.items || []);
+        st.binders = mergeBinders(st.binders || [], rb);
+        meta.sig[id] = sig({ items: rb });
+        any = true; return;
+      }
       if (id === WISH) {
         st.wish = d.deleted ? [] : (d.items || []);
         meta.sig[id] = sig({ items: st.wish });
@@ -505,6 +533,12 @@
     unsubs.push(base.collection('meta').doc('history').onSnapshot(function (s) {
       if (s.exists) applyRemote([{ id: HIST, data: s.data() }]);
     }, onErr));
+    unsubs.push(base.collection('meta').doc('binders').onSnapshot(function (s) {
+      if (s.exists) applyRemote([{ id: BIND, data: s.data() }]);
+    }, function (e) {
+      /* Ohne Binder soll eine fehlende Freigabe in den Regeln keinen Fehler anzeigen */
+      if ((App.getState().binders || []).length) setStatus('Binder: ' + niceError(e), true);
+    }));
     listenPhotos();
     flushPhotos();
   }
@@ -521,12 +555,14 @@
     Promise.all([
       base.collection('collections').get({ source: 'server' }),
       base.collection('meta').doc('wish').get({ source: 'server' }),
-      base.collection('meta').doc('history').get({ source: 'server' })
+      base.collection('meta').doc('history').get({ source: 'server' }),
+      base.collection('meta').doc('binders').get({ source: 'server' }).catch(function () { return null; })
     ]).then(function (r) {
       var es = [];
       r[0].forEach(function (d) { es.push({ id: d.id, data: d.data() }); });
       if (r[1].exists) es.push({ id: WISH, data: r[1].data() });
       if (r[2].exists) es.push({ id: HIST, data: r[2].data() });
+      if (r[3] && r[3].exists) es.push({ id: BIND, data: r[3].data() });
       applyRemote(es);
       return flush();
     }).then(function () {
