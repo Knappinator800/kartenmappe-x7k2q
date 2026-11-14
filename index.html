@@ -472,7 +472,34 @@ h1{font-size:1.7rem}
 .pocket .stars{position:absolute;left:6px;top:4px;z-index:4;font-size:.78rem;color:#ffe066;text-shadow:0 1px 3px rgba(0,0,0,.8)}
 .pocket .chip2{position:absolute;left:5px;bottom:22px;z-index:4;font-size:.5rem;font-weight:800;letter-spacing:.05em;padding:2px 5px;border-radius:5px;background:rgba(0,0,0,.62);border:1px solid rgba(255,255,255,.4)}
 .pocket.rv .thumb::after,.pocket.rv .face::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(115deg,rgba(255,255,255,0) 0 7px,rgba(255,255,255,.17) 7px 9px);mix-blend-mode:screen}
-.pocket.wish .thumb,.pocket.wish .face{filter:grayscale(.85) brightness(.52)}
+.pocket.wish .thumb,.pocket.wish .face{filter:grayscale(.3) brightness(.82)}
+.pocketgrid.plan .pocket.wish .thumb,.pocketgrid.plan .pocket.wish .face{filter:none}
+.pocketgrid.plan .pocket.wish::after{box-shadow:inset 0 0 0 1px rgba(255,255,255,.22),inset 0 1px 0 rgba(255,255,255,.5)}
+.pocketgrid.plan .pocket .heart{width:18px;height:18px;opacity:.9}
+.pocketgrid.plan .pocket .heart svg{width:10px;height:10px}
+.bcolprog{font-size:.86rem;color:var(--muted);padding:6px 0}
+.bsheet>*{flex-shrink:0}
+.bcolprog.err{color:#ff8a8a}
+.gbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.gbar .gstep{font-size:.9rem}
+.bsheet .gbar .btn.small{width:auto;padding:6px 14px}
+.gmini{display:flex;flex-wrap:wrap;gap:12px;margin-top:6px}
+.gpage{flex:1 1 90px;max-width:160px;min-width:0}
+.glabel{display:block;border:0;background:none;color:var(--muted);font:inherit;font-size:.76rem;padding:2px 0 5px;text-align:left}
+.gcells{display:grid;grid-template-columns:repeat(var(--cols,3),1fr);gap:4px}
+.gcell{display:block;width:100%;aspect-ratio:63/88;padding:0;border-radius:4px;border:1.5px solid var(--edge);background:transparent;position:relative}
+.gcell.on{border-color:var(--accent);background:var(--accent-soft)}
+.gcell.lock{border-style:dashed;border-color:var(--muted);background:repeating-linear-gradient(135deg,transparent 0 4px,rgba(255,255,255,.12) 4px 6px)}
+.gcell.off{opacity:.55}
+.gprev{margin-top:12px}
+.gprev .gpage{flex:1 1 120px;max-width:230px}
+.pcell{position:relative;aspect-ratio:63/88;border-radius:4px;overflow:hidden;background:rgba(255,255,255,.05)}
+.pcell.empty{border:1.5px dashed var(--edge);background:transparent}
+.pcell.fixed{opacity:.5}
+.pcell .thumb{position:absolute;inset:0;width:100%;height:100%;aspect-ratio:auto;border-radius:0}
+.pcell .thumb img{object-fit:cover}
+.gcell.occ::after{content:"";position:absolute;left:22%;right:22%;top:20%;bottom:20%;border-radius:2px;background:currentColor;opacity:.55;color:var(--muted)}
+.gcell.on.occ::after{color:var(--accent)}
 .pocket.wish::after{box-shadow:inset 0 0 0 2px var(--accent)}
 .pocket .heart{position:absolute;z-index:5;right:5px;top:5px;width:24px;height:24px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.5)}
 .pocket .heart svg{width:14px;height:14px;fill:var(--accent-ink)}
@@ -5021,7 +5048,7 @@ body.bdragging{-webkit-user-select:none;user-select:none;overflow:hidden}
       var f = part[0], l = part[part.length - 1];
       label = f ? 'Nr. ' + f.num + (l && l !== f ? '–' + l.num : '') : '';
     } else label = 'Seite ' + (pi + 1);
-    var grid = el('div', { class: 'pocketgrid' });
+    var grid = el('div', { class: 'pocketgrid' + (b.plan ? ' plan' : '') });
     grid.style.setProperty('--cols', b.cols);
     for (var j = 0; j < per; j++) {
       var e = part[j];
@@ -5291,22 +5318,24 @@ body.bdragging{-webkit-user-select:none;user-select:none;overflow:hidden}
     return { node: box, get: function () { return all.filter(function (s) { return on[s.id]; }).map(function (s) { return s.id; }); },
       all: function () { return all.map(function (s) { return s.id; }); } };
   }
-  function bPicker(b, startPos) {
+  function bPicker(b, startPos, onPick, taken) {
     bSheet('Karten hinzufügen', function (sheet, api) {
       var chosen = {}, order = [], q = '';
       var inB = {}; b.slots.forEach(function (s) { if (s) inB[s.key] = true; });
+      if (taken) Object.keys(taken).forEach(function (k) { inB[k] = true; });
       var srcSel = bSrcChips([state.active && collById(state.active) ? state.active : state.collections[0].id], function () { draw(); });
       var search = el('input', { type: 'search', placeholder: 'Name, Set oder Nummer', 'aria-label': 'Karten suchen' });
       var listEl = el('div', { class: 'setlist', style: 'max-height:38vh' });
-      var go = bBtn('Hinzufügen', function () {
+      var go = bBtn(onPick ? 'Übernehmen' : 'Hinzufügen', function () {
         var items = order.filter(function (k) { return chosen[k]; }).map(function (k) { return chosen[k]; });
         if (!items.length) return;
+        if (onPick) { api.close(); onPick(items); return; }
         var snap = JSON.stringify(state);
         bAddItems(b, items, startPos); bTouch(b); save(); api.close(); renderCollection();
         offerUndo(items.length === 1 ? 'Karte in den Binder gelegt' : items.length + ' Karten in den Binder gelegt', snap);
       }, 'primary');
       go.disabled = true;
-      function upd() { go.textContent = order.filter(function (k) { return chosen[k]; }).length + ' hinzufügen'; go.disabled = !order.some(function (k) { return chosen[k]; }); }
+      function upd() { go.textContent = order.filter(function (k) { return chosen[k]; }).length + (onPick ? ' übernehmen' : ' hinzufügen'); go.disabled = !order.some(function (k) { return chosen[k]; }); }
       function draw() {
         var pool0 = bPool(srcSel.get());
         var f = q.trim().toLowerCase();
@@ -5484,7 +5513,8 @@ body.bdragging{-webkit-user-select:none;user-select:none;overflow:hidden}
       sheet.append(el('div', { style: 'margin-top:8px' },
         b.type === 'set' ? tog('Fehlende Karten zeigen', 'Leere Taschen mit Nummer', 'missing') : null,
         tog('Preis auf der Karte', 'Kleiner Preis unten rechts', 'price'),
-        tog('Anzahl-Marke', 'Nur bei mehr als einer Karte', 'qty')));
+        tog('Anzahl-Marke', 'Nur bei mehr als einer Karte', 'qty'),
+        tog('Planungsansicht', 'Wunschkarten in voller Farbe, nur mit kleinem Herz', 'plan')));
     });
   }
   function bRename(b) {
@@ -5508,9 +5538,284 @@ body.bdragging{-webkit-user-select:none;user-select:none;overflow:hidden}
         bBtn('Abbrechen', api.close)));
     }, { modal: true });
   }
+  /* ----- Gesamtbild: Karten nach Bildfarbe anordnen ----- */
+  var bColMem = {}, BCOLKEY = 'pokesammlung.colors';
+  try { bColMem = JSON.parse(localStorage.getItem(BCOLKEY) || '{}') || {}; } catch (e) { bColMem = {}; }
+  function bColSave() {
+    try {
+      var ks = Object.keys(bColMem);
+      if (ks.length > 3000) ks.slice(0, 600).forEach(function (k) { delete bColMem[k]; });
+      localStorage.setItem(BCOLKEY, JSON.stringify(bColMem));
+    } catch (e) {}
+  }
+  /* Ersatzfarbe nach Energie-Typ (falls das Bild nicht ausgewertet werden darf): [Farbton, Sättigung, Helligkeit] */
+  var BTYPE = {
+    Fire: [12, .8, .5], Feuer: [12, .8, .5], '炎': [12, .8, .5], '火': [12, .8, .5],
+    Water: [210, .75, .5], Wasser: [210, .75, .5], '水': [210, .75, .5],
+    Grass: [115, .6, .42], Pflanze: [115, .6, .42], '草': [115, .6, .42],
+    Lightning: [52, .9, .55], Electric: [52, .9, .55], Elektro: [52, .9, .55], '雷': [52, .9, .55],
+    Psychic: [285, .55, .45], Psycho: [285, .55, .45], '超': [285, .55, .45],
+    Fighting: [24, .55, .34], Kampf: [24, .55, .34], '闘': [24, .55, .34], '鬥': [24, .55, .34], '格斗': [24, .55, .34],
+    Darkness: [250, .1, .18], Finsternis: [250, .1, .18], '悪': [250, .1, .18], '惡': [250, .1, .18], '恶': [250, .1, .18],
+    Metal: [210, .08, .55], Metall: [210, .08, .55], '鋼': [210, .08, .55], '钢': [210, .08, .55],
+    Fairy: [325, .55, .68], Fee: [325, .55, .68], 'フェアリー': [325, .55, .68], '妖精': [325, .55, .68],
+    Dragon: [44, .7, .45], Drache: [44, .7, .45], 'ドラゴン': [44, .7, .45], '龍': [44, .7, .45], '龙': [44, .7, .45],
+    Colorless: [40, .06, .82], Farblos: [40, .06, .82], '無色': [40, .06, .82], '无色': [40, .06, .82]
+  };
+  /* Hauptfarbe aus dem Bild: Farbton (nach Sättigung gewichtet), mittlere Sättigung, mittlere Helligkeit. Nur das Artwork-Fenster zählt. */
+  function bImgColor(url) {
+    return new Promise(function (res, rej) {
+      var im = new Image();
+      im.crossOrigin = 'anonymous';
+      im.onload = function () {
+        try {
+          var W = 32, H = 44, c = document.createElement('canvas');
+          c.width = W; c.height = H;
+          var g = c.getContext('2d', { willReadFrequently: true });
+          g.drawImage(im, 0, 0, W, H);
+          var d = g.getImageData(3, 6, 26, 17).data, n = d.length / 4, sx = 0, sy = 0, ss = 0, sl = 0, sw = 0;
+          for (var i = 0; i < d.length; i += 4) {
+            var r = d[i] / 255, gg = d[i + 1] / 255, bb = d[i + 2] / 255;
+            var mx = Math.max(r, gg, bb), mn = Math.min(r, gg, bb), df = mx - mn, h = 0;
+            var sat = mx ? df / mx : 0;
+            if (df) h = mx === r ? ((gg - bb) / df) % 6 : mx === gg ? (bb - r) / df + 2 : (r - gg) / df + 4;
+            var rad = h * Math.PI / 3, w = sat * sat * mx;
+            sx += w * Math.cos(rad); sy += w * Math.sin(rad); sw += w;
+            ss += sat; sl += (mx + mn) / 2;
+          }
+          var hue = sw > 1e-6 ? (Math.atan2(sy, sx) * 180 / Math.PI + 360) % 360 : 0;
+          res([Math.round(hue), +(ss / n).toFixed(3), +(sl / n).toFixed(3)]);
+        } catch (e) { rej(e); }
+      };
+      im.onerror = function () { rej(new Error('img')); };
+      im.src = url;
+    });
+  }
+  function bColorOf(s) {
+    var own = photoOf(s.lang, s.id), key = s.lang + ':' + s.id + (own ? ':own' : '');
+    if (bColMem[key]) return Promise.resolve(bColMem[key]);
+    var base = own || s.image, urls = base ? imageUrls(base, s.lang, ['low']) : [], i = 0;
+    function nextImg() { if (i >= urls.length) return Promise.reject(new Error('none')); return bImgColor(urls[i++]).catch(nextImg); }
+    return nextImg().then(function (c) { bColMem[key] = c; return c; }, function () {
+      return getCard(s.lang, s.id).then(function (card) {
+        var t = card && card.types && card.types[0], m = t && BTYPE[t];
+        return m ? m.slice() : [0, 0, .5, 'x'];
+      }, function () { return [0, 0, .5, 'x']; });
+    });
+  }
+  /* Ordnet Karten als Farbverlauf auf die gewählten Felder: Die Felder werden nach Spalten (von links nach rechts über alle gewählten Seiten)
+     zusammengefasst. Die Karten werden nach Farbton durch den Farbkreis sortiert und Spalte für Spalte verteilt, in jeder Spalte von hell nach dunkel.
+     Karten ohne klare Farbe (Sättigung unter 0,2) kommen ans Ende, von hell nach dunkel.
+     targets: [{pg, idx}] in beliebiger Reihenfolge. Gibt je Karte (Index) die Slot-Position im Binder zurück. */
+  function bColorLayout(b, startPg, targets, colors, mode) {
+    var per = bPer(b), cols = b.cols, byRow = mode === 'row';
+    var idx = colors.map(function (_, i) { return i; });
+    var chrom = idx.filter(function (i) { return colors[i][1] >= 0.2; });
+    var neut = idx.filter(function (i) { return colors[i][1] < 0.2; });
+    chrom.sort(function (a, c) { return ((colors[a][0] + 20) % 360) - ((colors[c][0] + 20) % 360); });
+    neut.sort(function (a, c) { return colors[c][2] - colors[a][2]; });
+    var order = chrom.concat(neut), groups = {};
+    function gcol(t) { return (t.pg - startPg) * cols + (t.idx % cols); }
+    function grow(t) { return Math.floor(t.idx / cols); }
+    targets.forEach(function (t) { var g = byRow ? grow(t) : gcol(t); (groups[g] = groups[g] || []).push(t); });
+    var gs = Object.keys(groups).map(Number).sort(function (a, c) { return a - c; }), out = [], used = 0;
+    gs.forEach(function (g) {
+      if (used >= order.length) return;
+      var cells = groups[g].sort(function (a, c) { return byRow ? gcol(a) - gcol(c) : grow(a) - grow(c); });
+      var grp = order.slice(used, used + cells.length);
+      used += grp.length;
+      grp.sort(function (a, c) { return colors[c][2] - colors[a][2]; });
+      grp.forEach(function (ci, r) { out[ci] = cells[r].pg * per + cells[r].idx; });
+    });
+    return out;
+  }
+  /* Liest die Farben aller Karten. Ruft done(colors) auf, oder done(null) bei Abbruch oder wenn die meisten Farben nicht lesbar waren. */
+  function bColorAnalyze(cards, api, status, done) {
+    var colors = new Array(cards.length), finished = 0;
+    api.cancelled = false;
+    status.textContent = 'Bilder werden ausgewertet … 0 von ' + cards.length;
+    var tasks = cards.map(function (s, i) {
+      return function () {
+        return bColorOf(s).then(function (c) { colors[i] = c; }, function () { colors[i] = [0, 0, .5, 'x']; }).then(function () {
+          finished++;
+          if (!api.cancelled) status.textContent = 'Bilder werden ausgewertet … ' + finished + ' von ' + cards.length;
+        });
+      };
+    });
+    pool(tasks, 4).then(function () {
+      if (api.cancelled) return;
+      bColSave();
+      var unknown = colors.filter(function (c) { return c[3] === 'x'; }).length;
+      if (unknown * 2 > cards.length) { showToast('Die Bildfarben konnten nicht gelesen werden. Prüfe die Internetverbindung und versuche es noch einmal.'); done(null); return; }
+      done(colors);
+    });
+  }
+  /* Assistent: Seiten, Felder und Karten wählen, dann nach Bildfarbe anordnen */
+  function bGesamt(b) {
+    var per = bPer(b), cols = b.cols, rows = b.rows;
+    var cur = Math.max(0, Math.min(b.pages - 1, bui.page[b.id] || 0));
+    var count = bLand() ? 2 : 1, start = count === 2 ? cur - (cur % 2) : cur;
+    var off = {}, skip = {}, extra = [], api0 = null;
+    bSheet('Gesamtbild anordnen', function (sheet, api) {
+      api0 = api;
+      var segBox = el('div', { class: 'seg', role: 'group', 'aria-label': 'Anzahl Seiten' });
+      var segBtns = [1, 2, 3, 4].map(function (n) {
+        var x = el('button', { type: 'button', text: n === 1 ? '1 Seite' : n === 2 ? '2 Seiten' : n + ' Seiten' });
+        x.addEventListener('click', function () { count = n; if (n === 2) start -= start % 2; redraw(); });
+        segBox.append(x); return x;
+      });
+      var stepTxt = el('b', { class: 'gstep' });
+      var stepPrev = bBtn('‹', function () { start = Math.max(0, start - (count === 2 ? 2 : 1)); redraw(); }, 'small');
+      var stepNext = bBtn('›', function () { start = Math.min(b.pages, start + (count === 2 ? 2 : 1)); redraw(); }, 'small');
+      stepPrev.setAttribute('aria-label', 'Frühere Seiten'); stepNext.setAttribute('aria-label', 'Spätere Seiten');
+      var mini = el('div', { class: 'gmini' });
+      var miniBtns = el('div', { class: 'gbar' });
+      var listEl = el('div', { class: 'setlist', style: 'max-height:30vh' });
+      var info = el('div', { class: 'bcolprog' });
+      var status = el('div', { class: 'bcolprog', hidden: true });
+      var go = bBtn('Vorschau anzeigen', run, 'primary');
+      var pv = el('div', { hidden: true });
+      var setupEls = [];
+      var addBtn = bBtn('Weitere Karten hinzufügen …', function () {
+        var taken = {}; extra.forEach(function (s) { taken[s.key] = true; });
+        bPicker(b, 0, function (items) { items.forEach(function (i) { if (!taken[i.key]) { extra.push(bSlotOf(i)); taken[i.key] = true; } }); redraw(); }, taken);
+      }, 'left');
+      function pagesList() { var a = []; for (var i = 0; i < count; i++) a.push(start + i); return a; }
+      function compute() {
+        var inArea = [], targets = [];
+        pagesList().forEach(function (pg) {
+          for (var idx = 0; idx < per; idx++) {
+            if (off[pg + ':' + idx]) continue;
+            var s = b.slots[pg * per + idx] || null;
+            if (s) inArea.push(s);
+            if (s && skip[s.key]) continue;
+            targets.push({ pg: pg, idx: idx });
+          }
+        });
+        var cards = inArea.concat(extra).filter(function (s) { return !skip[s.key]; });
+        return { inArea: inArea, cards: cards, targets: targets };
+      }
+      function redraw() {
+        segBtns.forEach(function (x, i) { x.setAttribute('aria-pressed', String(count === i + 1)); });
+        var pl = pagesList();
+        stepTxt.textContent = count === 1 ? 'Seite ' + (start + 1) : 'Seiten ' + (start + 1) + '–' + (start + count) + (count === 2 && start % 2 === 0 ? ' (Doppelseite)' : '');
+        stepPrev.disabled = start <= 0; stepNext.disabled = start >= b.pages;
+        mini.replaceChildren();
+        pl.forEach(function (pg) {
+          var grid = el('div', { class: 'gcells' });
+          grid.style.setProperty('--cols', cols);
+          for (var idx = 0; idx < per; idx++) (function (idx) {
+            var k = pg + ':' + idx, sl = b.slots[pg * per + idx] || null;
+            var cls = 'gcell' + (off[k] ? ' off' : (sl && skip[sl.key]) ? ' lock' : ' on') + (sl ? ' occ' : '');
+            var c = el('button', { type: 'button', class: cls, 'aria-label': 'Feld ' + (idx + 1) + ', Seite ' + (pg + 1) + (off[k] ? ', nicht ausgewählt' : ', ausgewählt') });
+            c.addEventListener('click', function () { if (off[k]) delete off[k]; else off[k] = true; redraw(); });
+            grid.append(c);
+          })(idx);
+          var lab = el('button', { type: 'button', class: 'glabel', text: 'Seite ' + (pg + 1) + (pg >= b.pages ? ' (neu)' : '') });
+          lab.addEventListener('click', function () {
+            var anyOn = false; for (var i = 0; i < per; i++) if (!off[pg + ':' + i]) anyOn = true;
+            for (var j = 0; j < per; j++) { if (anyOn) off[pg + ':' + j] = true; else delete off[pg + ':' + j]; }
+            redraw();
+          });
+          mini.append(el('div', { class: 'gpage' }, lab, grid));
+        });
+        var cp = compute();
+        listEl.replaceChildren();
+        var rowsData = cp.inArea.map(function (s) { return { s: s, isNew: false }; }).concat(extra.map(function (s) { return { s: s, isNew: true }; }));
+        if (!rowsData.length) listEl.append(el('div', { class: 'bmeta', text: 'In den gewählten Feldern liegen keine Karten. Füge unten weitere Karten hinzu.' }));
+        rowsData.forEach(function (d) {
+          var s = d.s, on = !skip[s.key];
+          var ck = el('span', { class: 'ck', text: on ? '✓' : '' });
+          var row = el('button', { class: 'brow', type: 'button', 'aria-pressed': String(on) },
+            el('span', { class: 'bt' }, thumbNode({ id: s.id, image: s.image, name: s.name }, s.lang)),
+            el('span', { class: 'bi' }, el('b', { text: s.name + (s.variant === 'reverse' ? ' (Reverse)' : '') }), el('span', { text: (d.isNew ? 'neu im Binder · ' : '') + [s.set, s.number].filter(Boolean).join(' · ') })), ck);
+          row.addEventListener('click', function () { if (skip[s.key]) delete skip[s.key]; else skip[s.key] = true; redraw(); });
+          listEl.append(row);
+        });
+        var n = cp.cards.length, t = cp.targets.length;
+        var bad = n > t;
+        info.textContent = n + (n === 1 ? ' Karte' : ' Karten') + ' für ' + t + (t === 1 ? ' freies Feld' : ' freie Felder') + (bad ? '. Zu viele Karten: Markiere mehr Felder oder wähle Karten ab.' : n < 2 ? '. Wähle mindestens 2 Karten.' : '.');
+        info.classList.toggle('err', bad);
+        go.disabled = bad || n < 2;
+      }
+      var last = null, mode = 'col';
+      function setupShow(on) { setupEls.forEach(function (x) { x.hidden = !on; }); pv.hidden = on; }
+      function run() {
+        var cp = compute();
+        setupEls.forEach(function (x) { x.hidden = true; });
+        status.hidden = false;
+        bColorAnalyze(cp.cards, api, status, function (colors) {
+          status.hidden = true;
+          if (!colors) { setupShow(true); return; }
+          last = { cp: cp, colors: colors };
+          drawPreview();
+          setupShow(false);
+          sheet.scrollTop = 0;
+        });
+      }
+      function drawPreview() {
+        var cp = last.cp, per2 = per;
+        var lay = bColorLayout(b, start, cp.targets, last.colors, mode);
+        var sim = {};
+        pagesList().forEach(function (pg) { for (var i = 0; i < per2; i++) sim[pg * per2 + i] = b.slots[pg * per2 + i] || null; });
+        cp.targets.forEach(function (t) { sim[t.pg * per2 + t.idx] = null; });
+        lay.forEach(function (p, i) { sim[p] = cp.cards[i]; });
+        var modeSeg = el('div', { class: 'seg', role: 'group', 'aria-label': 'Richtung des Verlaufs' });
+        [['col', 'Links → rechts'], ['row', 'Oben → unten']].forEach(function (m) {
+          var x = el('button', { type: 'button', text: m[1], 'aria-pressed': String(mode === m[0]) });
+          x.addEventListener('click', function () { mode = m[0]; drawPreview(); });
+          modeSeg.append(x);
+        });
+        var pages = el('div', { class: 'gmini gprev' });
+        pagesList().forEach(function (pg) {
+          var grid = el('div', { class: 'gcells' });
+          grid.style.setProperty('--cols', cols);
+          for (var i = 0; i < per2; i++) {
+            var sl = sim[pg * per2 + i], isT = false;
+            var fixed = !!sl && cp.targets.every(function (t) { return !(t.pg === pg && t.idx === i); });
+            var cell = el('div', { class: 'pcell' + (sl ? '' : ' empty') + (fixed ? ' fixed' : '') });
+            if (sl) cell.append(thumbNode({ id: sl.id, image: sl.image, name: sl.name }, sl.lang));
+            grid.append(cell);
+          }
+          pages.append(el('div', { class: 'gpage' }, el('div', { class: 'glabel', text: 'Seite ' + (pg + 1) + (pg >= b.pages ? ' (neu)' : '') }), grid));
+        });
+        pv.replaceChildren(
+          el('div', { class: 'lbl', text: 'Vorschau' }),
+          el('p', { class: 'hintp', text: 'So würden die Karten liegen. Es ist noch nichts geändert. Gefällt es dir nicht, gehst du zurück oder wechselst die Richtung.' }),
+          modeSeg, pages,
+          el('div', { class: 'stack' },
+            bBtn('Übernehmen', function () { applyPreview(); }, 'primary'),
+            bBtn('Zurück zur Auswahl', function () { setupShow(true); }, 'left')));
+      }
+      function applyPreview() {
+        var cp = last.cp, per2 = per, snap = JSON.stringify(state);
+        var lay = bColorLayout(b, start, cp.targets, last.colors, mode), maxPg = 0;
+        cp.targets.forEach(function (t) { b.slots[t.pg * per2 + t.idx] = null; maxPg = Math.max(maxPg, t.pg); });
+        while (b.slots.length < (maxPg + 1) * per2) b.slots.push(null);
+        lay.forEach(function (p, i) { b.slots[p] = cp.cards[i]; });
+        bFit(b); bTouch(b); save(); api.close(); renderCollection();
+        offerUndo('Gesamtbild angeordnet', snap);
+      }
+      miniBtns.append(bBtn('Alle Felder', function () { off = {}; redraw(); }, 'small'), bBtn('Keine Felder', function () { pagesList().forEach(function (pg) { for (var i = 0; i < per; i++) off[pg + ':' + i] = true; }); redraw(); }, 'small'));
+      sheet.append(
+        el('p', { class: 'hintp', text: 'Wähle, auf welche Seiten und Felder die Karten verteilt werden und welche Karten dabei sind. Die App liest die Hauptfarbe jedes Bilds (auch bei eigenen Fotos) und legt einen Farbverlauf von links nach rechts.' }),
+        el('div', { class: 'lbl', text: 'Seiten' }), segBox,
+        el('div', { class: 'gbar', style: 'margin-top:8px' }, stepPrev, stepTxt, stepNext),
+        el('div', { class: 'lbl', style: 'margin-top:12px', text: 'Felder (antippen zum An- und Abwählen)' }), mini, miniBtns,
+        el('div', { class: 'lbl', style: 'margin-top:12px', text: 'Karten' }), listEl,
+        el('div', { class: 'stack' }, addBtn), info, el('div', { class: 'stack' }, go));
+      /* alles, was zur Auswahl gehört, lässt sich als Ganzes ausblenden: wir sammeln die Kinder nach der Überschrift */
+      setupEls = Array.prototype.slice.call(sheet.children).filter(function (c) { return !c.classList.contains('bx') && c.tagName !== 'H2'; });
+      sheet.append(status, pv);
+      redraw();
+    }, { onClose: function () { if (api0) api0.cancelled = true; } });
+  }
   function bSortSheet(b) {
     bSheet('Automatisch ordnen', function (sheet, api) {
-      sheet.append(el('p', { class: 'hintp', text: 'Alle Karten werden neu angeordnet und rücken nach vorn. Leere Taschen entfallen.' }));
+      sheet.append(el('div', { class: 'lbl', text: 'Gesamtbild nach Bildfarbe' }),
+        el('p', { class: 'hintp', text: 'Ordnet ausgewählte Karten als Farbverlauf auf einem Teil einer Seite, einer Seite oder mehreren Seiten. Du wählst Seiten, Felder und Karten selbst.' }),
+        el('div', { class: 'stack' }, bBtn('Gesamtbild einrichten …', function () { api.close(); bGesamt(b); }, 'left')));
+      var stackSort = el('div', { class: 'stack' });
       function sortBy(how) {
         api.close();
         var snap = JSON.stringify(state), ix = bIndex();
@@ -5525,10 +5830,11 @@ body.bdragging{-webkit-user-select:none;user-select:none;overflow:hidden}
         });
         b.slots = cards; bFit(b); bTouch(b); save(); renderCollection(); offerUndo('Binder geordnet', snap);
       }
-      sheet.append(el('div', { class: 'stack' },
-        bBtn('Nach Set und Nummer', function () { sortBy('set'); }, 'left'),
+      stackSort.append(bBtn('Nach Set und Nummer', function () { sortBy('set'); }, 'left'),
         bBtn('Nach Name', function () { sortBy('name'); }, 'left'),
-        bBtn('Nach Preis (hoch zu niedrig)', function () { sortBy('price'); }, 'left')));
+        bBtn('Nach Preis (hoch zu niedrig)', function () { sortBy('price'); }, 'left'));
+      sheet.append(el('div', { class: 'lbl', style: 'margin-top:14px', text: 'Ganzen Binder sortieren' }),
+        el('p', { class: 'hintp', text: 'Alle Karten werden neu angeordnet und rücken nach vorn. Leere Taschen entfallen.' }), stackSort);
     });
   }
   function bCreate() {
