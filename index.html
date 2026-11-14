@@ -495,7 +495,15 @@ h1{font-size:1.7rem}
 .gprev .gpage{flex:1 1 120px;max-width:230px}
 .pcell{position:relative;aspect-ratio:63/88;border-radius:4px;overflow:hidden;background:rgba(255,255,255,.05)}
 .pcell.empty{border:1.5px dashed var(--edge);background:transparent}
+.pcell{display:block;width:100%;padding:0;border:0;font:inherit}
 .pcell.fixed{opacity:.5}
+.pcell.sel{outline:3px solid var(--accent);outline-offset:1px}
+.pcell.empty{border:1.5px dashed var(--edge)}
+.scenebox{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.layer{display:flex;align-items:center;gap:6px;padding:6px 8px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.layer .lname{flex:1;min-width:0;font-size:.9rem;font-weight:600}
+.layer .lcount{font-size:.76rem;color:var(--muted)}
+.bsheet .layer .btn.small{width:34px;padding:4px 0;min-height:0;justify-content:center}
 .pcell .thumb{position:absolute;inset:0;width:100%;height:100%;aspect-ratio:auto;border-radius:0}
 .pcell .thumb img{object-fit:cover}
 .gcell.occ::after{content:"";position:absolute;left:22%;right:22%;top:20%;bottom:20%;border-radius:2px;background:currentColor;opacity:.55;color:var(--muted)}
@@ -5629,6 +5637,71 @@ body.bdragging{-webkit-user-select:none;user-select:none;overflow:hidden}
     });
     return out;
   }
+  /* Szene: Ebenen wie Sand, flaches und tiefes Wasser. Jede Karte kommt in die Ebene, deren Musterfarbe ihrer Hauptfarbe am nächsten ist.
+     Musterfarben: [Farbton, Sättigung, Helligkeit] in derselben Messung wie bColorOf. */
+  var BSCENE = {
+    sand: { n: 'Sand / Strand', c: [45, .4, .72] },
+    flach: { n: 'Flaches Wasser', c: [185, .65, .58] },
+    tief: { n: 'Tiefes Wasser', c: [225, .8, .3] },
+    wiese: { n: 'Wiese', c: [112, .65, .45] },
+    wald: { n: 'Wald', c: [140, .7, .25] },
+    himmel: { n: 'Himmel', c: [200, .45, .75] },
+    fels: { n: 'Fels / Erde', c: [30, .3, .4] },
+    lava: { n: 'Lava / Feuer', c: [10, .85, .5] },
+    nacht: { n: 'Nacht / Dunkel', c: [245, .45, .12] },
+    schnee: { n: 'Schnee / Eis', c: [205, .1, .9] }
+  };
+  /* Vorlagen, von oben nach unten */
+  var BSCENES = [
+    ['Strand & Meer', ['tief', 'flach', 'sand']],
+    ['Wiese & Himmel', ['himmel', 'wiese']],
+    ['Wald & Himmel', ['himmel', 'wald', 'wiese']],
+    ['Berg', ['schnee', 'fels', 'wald']],
+    ['Vulkan', ['nacht', 'fels', 'lava']]
+  ];
+  function bSceneDist(col, proto) {
+    var dh = Math.abs(col[0] - proto[0]); dh = Math.min(dh, 360 - dh) / 180;
+    var hw = Math.sqrt(Math.min(1, col[1]) * Math.min(1, proto[1]));
+    var a = dh * hw * 1.8, l = (col[2] - proto[2]) * 1.5, s = (col[1] - proto[1]) * 0.9;
+    return Math.sqrt(a * a + l * l + s * s);
+  }
+  /* Welche Ebene (Index in layersTop, von oben nach unten) passt zu jeder Karte */
+  function bSceneAssign(colors, layersTop) {
+    return colors.map(function (c) {
+      var best = 0, bd = 1e9;
+      layersTop.forEach(function (k, i) { var d = bSceneDist(c, BSCENE[k].c); if (d < bd) { bd = d; best = i; } });
+      return best;
+    });
+  }
+  /* Füllt die Felder zeilenweise: unterste Ebene unten. Fehlen Karten, werden die Lücken gleichmäßig auf alle Zeilen verteilt (am rechten Rand). */
+  function bSceneLayout(b, startPg, targets, colors, layersTop) {
+    var per = bPer(b), cols = b.cols;
+    var lay = bSceneAssign(colors, layersTop), n = colors.length;
+    var idx = colors.map(function (_, i) { return i; });
+    /* von unten nach oben: größerer Ebenenindex zuerst, in der Ebene hell nach dunkel */
+    idx.sort(function (a, c) { return (lay[c] - lay[a]) || (colors[c][2] - colors[a][2]); });
+    var rowsMap = {};
+    targets.forEach(function (t) { var r = Math.floor(t.idx / cols); (rowsMap[r] = rowsMap[r] || []).push(t); });
+    var rowKeys = Object.keys(rowsMap).map(Number).sort(function (a, c) { return c - a; });
+    var total = targets.length, empties = Math.max(0, total - n), R = rowKeys.length, out = [], used = 0;
+    rowKeys.forEach(function (r, ri) {
+      var cells = rowsMap[r].sort(function (a, c) { return ((a.pg - startPg) * cols + a.idx % cols) - ((c.pg - startPg) * cols + c.idx % cols); });
+      var e = Math.floor(empties / R) + (ri >= R - (empties % R) ? 1 : 0);
+      var take = Math.max(0, Math.min(cells.length - e, n - used));
+      var chunk = idx.slice(used, used + take);
+      used += take;
+      /* in der Zeile: nach Ebene, dann nach Farbton, damit die Zeile ruhig verläuft */
+      chunk.sort(function (a, c) { return (lay[c] - lay[a]) || (colors[a][0] - colors[c][0]); });
+      chunk.forEach(function (ci, k) { out[ci] = cells[k].pg * per + cells[k].idx; });
+    });
+    /* Reste (falls Zeilen zu knapp gerechnet) auf freie Felder legen */
+    if (used < n) {
+      var taken = {}; out.forEach(function (p) { taken[p] = true; });
+      var free = []; rowKeys.forEach(function (r) { rowsMap[r].forEach(function (t) { var p = t.pg * per + t.idx; if (!taken[p]) free.push(p); }); });
+      idx.slice(used).forEach(function (ci) { out[ci] = free.shift(); });
+    }
+    return out;
+  }
   /* Liest die Farben aller Karten. Ruft done(colors) auf, oder done(null) bei Abbruch oder wenn die meisten Farben nicht lesbar waren. */
   function bColorAnalyze(cards, api, status, done) {
     var colors = new Array(cards.length), finished = 0;
@@ -5738,7 +5811,7 @@ body.bdragging{-webkit-user-select:none;user-select:none;overflow:hidden}
         info.classList.toggle('err', bad);
         go.disabled = bad || n < 2;
       }
-      var last = null, mode = 'col';
+      var last = null, mode = 'col', sceneTop = BSCENES[0][1].slice(), sel = -1, keepScroll = 0;
       function setupShow(on) { setupEls.forEach(function (x) { x.hidden = !on; }); pv.hidden = on; }
       function run() {
         var cp = compute();
@@ -5747,49 +5820,98 @@ body.bdragging{-webkit-user-select:none;user-select:none;overflow:hidden}
         bColorAnalyze(cp.cards, api, status, function (colors) {
           status.hidden = true;
           if (!colors) { setupShow(true); return; }
-          last = { cp: cp, colors: colors };
+          last = { cp: cp, colors: colors, lay: null };
+          relay();
           drawPreview();
           setupShow(false);
           sheet.scrollTop = 0;
         });
       }
+      /* neue automatische Anordnung (verwirft Tausch von Hand) */
+      function relay() {
+        sel = -1;
+        last.lay = mode === 'scene' ? bSceneLayout(b, start, last.cp.targets, last.colors, sceneTop)
+          : bColorLayout(b, start, last.cp.targets, last.colors, mode);
+      }
       function drawPreview() {
-        var cp = last.cp, per2 = per;
-        var lay = bColorLayout(b, start, cp.targets, last.colors, mode);
-        var sim = {};
+        var cp = last.cp, per2 = per, lay = last.lay;
+        var sim = {}, who = {};
         pagesList().forEach(function (pg) { for (var i = 0; i < per2; i++) sim[pg * per2 + i] = b.slots[pg * per2 + i] || null; });
         cp.targets.forEach(function (t) { sim[t.pg * per2 + t.idx] = null; });
-        lay.forEach(function (p, i) { sim[p] = cp.cards[i]; });
-        var modeSeg = el('div', { class: 'seg', role: 'group', 'aria-label': 'Richtung des Verlaufs' });
-        [['col', 'Links → rechts'], ['row', 'Oben → unten']].forEach(function (m) {
+        lay.forEach(function (p, i) { sim[p] = cp.cards[i]; who[p] = i; });
+        var isTarget = {}; cp.targets.forEach(function (t) { isTarget[t.pg * per2 + t.idx] = true; });
+        var modeSeg = el('div', { class: 'seg', role: 'group', 'aria-label': 'Art der Anordnung' });
+        [['col', 'Links → rechts'], ['row', 'Oben → unten'], ['scene', 'Szene']].forEach(function (m) {
           var x = el('button', { type: 'button', text: m[1], 'aria-pressed': String(mode === m[0]) });
-          x.addEventListener('click', function () { mode = m[0]; drawPreview(); });
+          x.addEventListener('click', function () { mode = m[0]; relay(); drawPreview(); });
           modeSeg.append(x);
         });
         var pages = el('div', { class: 'gmini gprev' });
         pagesList().forEach(function (pg) {
           var grid = el('div', { class: 'gcells' });
           grid.style.setProperty('--cols', cols);
-          for (var i = 0; i < per2; i++) {
-            var sl = sim[pg * per2 + i], isT = false;
-            var fixed = !!sl && cp.targets.every(function (t) { return !(t.pg === pg && t.idx === i); });
-            var cell = el('div', { class: 'pcell' + (sl ? '' : ' empty') + (fixed ? ' fixed' : '') });
+          for (var i = 0; i < per2; i++) (function (i) {
+            var p = pg * per2 + i, sl = sim[p];
+            var cell = el('button', { type: 'button', class: 'pcell' + (sl ? '' : ' empty') + (!isTarget[p] ? ' fixed' : '') + (sel === p ? ' sel' : '') });
             if (sl) cell.append(thumbNode({ id: sl.id, image: sl.image, name: sl.name }, sl.lang));
+            if (sl) cell.setAttribute('aria-label', sl.name); else cell.setAttribute('aria-label', 'Leeres Feld');
+            if (!isTarget[p]) cell.disabled = true;
+            cell.addEventListener('click', function () {
+              if (sel < 0) { if (who[p] !== undefined) { sel = p; drawPreview(); } return; }
+              if (sel === p) { sel = -1; drawPreview(); return; }
+              var a1 = who[sel], a2 = who[p];
+              if (a1 !== undefined) lay[a1] = p;
+              if (a2 !== undefined) lay[a2] = sel;
+              sel = -1; drawPreview();
+            });
             grid.append(cell);
-          }
+          })(i);
           pages.append(el('div', { class: 'gpage' }, el('div', { class: 'glabel', text: 'Seite ' + (pg + 1) + (pg >= b.pages ? ' (neu)' : '') }), grid));
         });
-        pv.replaceChildren(
-          el('div', { class: 'lbl', text: 'Vorschau' }),
-          el('p', { class: 'hintp', text: 'So würden die Karten liegen. Es ist noch nichts geändert. Gefällt es dir nicht, gehst du zurück oder wechselst die Richtung.' }),
-          modeSeg, pages,
+        var parts = [el('div', { class: 'lbl', text: 'Vorschau' }),
+          el('p', { class: 'hintp', text: 'So würden die Karten liegen. Es ist noch nichts geändert. Tippe zwei Karten nacheinander an, um sie zu tauschen, oder eine Karte und ein leeres Feld, um sie dorthin zu legen.' }),
+          modeSeg];
+        parts.push(pages);
+        if (mode === 'scene') parts.push(sceneBox());
+        parts.push(
           el('div', { class: 'stack' },
             bBtn('Übernehmen', function () { applyPreview(); }, 'primary'),
             bBtn('Zurück zur Auswahl', function () { setupShow(true); }, 'left')));
+        pv.replaceChildren.apply(pv, parts);
+      }
+      /* Szene: Ebenen von oben nach unten einstellen */
+      function sceneBox() {
+        var box = el('div', { class: 'scenebox' });
+        var presets = el('div', { class: 'srcchips' });
+        BSCENES.forEach(function (pr) {
+          var on = pr[1].join() === sceneTop.join();
+          var x = el('button', { class: 'btn small', type: 'button', 'aria-pressed': String(on), text: pr[0] });
+          x.addEventListener('click', function () { sceneTop = pr[1].slice(); relay(); drawPreview(); });
+          presets.append(x);
+        });
+        box.append(el('div', { class: 'lbl', text: 'Vorlage' }), presets, el('div', { class: 'lbl', style: 'margin-top:8px', text: 'Ebenen (oben → unten)' }));
+        var counts = bSceneAssign(last.colors, sceneTop).reduce(function (a, i) { a[i] = (a[i] || 0) + 1; return a; }, {});
+        sceneTop.forEach(function (k, i) {
+          var up = bBtn('↑', function () { var t = sceneTop[i - 1]; sceneTop[i - 1] = k; sceneTop[i] = t; relay(); drawPreview(); }, 'small');
+          var dn = bBtn('↓', function () { var t = sceneTop[i + 1]; sceneTop[i + 1] = k; sceneTop[i] = t; relay(); drawPreview(); }, 'small');
+          var rm = bBtn('×', function () { sceneTop.splice(i, 1); relay(); drawPreview(); }, 'small');
+          up.disabled = i === 0; dn.disabled = i === sceneTop.length - 1; rm.disabled = sceneTop.length <= 1;
+          up.setAttribute('aria-label', 'Ebene nach oben'); dn.setAttribute('aria-label', 'Ebene nach unten'); rm.setAttribute('aria-label', 'Ebene entfernen');
+          box.append(el('div', { class: 'layer' }, el('span', { class: 'lname', text: BSCENE[k].n }), el('span', { class: 'lcount', text: (counts[i] || 0) + ' Karten' }), up, dn, rm));
+        });
+        var rest = Object.keys(BSCENE).filter(function (k) { return sceneTop.indexOf(k) < 0; });
+        if (rest.length) {
+          var sel2 = el('select', { 'aria-label': 'Ebene hinzufügen' });
+          sel2.append(el('option', { value: '', text: '+ Ebene hinzufügen …' }));
+          rest.forEach(function (k) { sel2.append(el('option', { value: k, text: BSCENE[k].n })); });
+          sel2.addEventListener('change', function () { if (sel2.value) { sceneTop.push(sel2.value); relay(); drawPreview(); } });
+          box.append(sel2);
+        }
+        return box;
       }
       function applyPreview() {
         var cp = last.cp, per2 = per, snap = JSON.stringify(state);
-        var lay = bColorLayout(b, start, cp.targets, last.colors, mode), maxPg = 0;
+        var lay = last.lay, maxPg = 0;
         cp.targets.forEach(function (t) { b.slots[t.pg * per2 + t.idx] = null; maxPg = Math.max(maxPg, t.pg); });
         while (b.slots.length < (maxPg + 1) * per2) b.slots.push(null);
         lay.forEach(function (p, i) { b.slots[p] = cp.cards[i]; });
